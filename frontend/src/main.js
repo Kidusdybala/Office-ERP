@@ -1,4 +1,4 @@
-let authMode = 'login', initDone=false, rulesWarn=false;
+let authMode = 'login', initDone=false, rulesWarn=false, dataSubs=null, dataSubsUid=null;
 function authModeFromHash(){
  const h=(location.hash||'').replace(/^#\/?/,'').toLowerCase();
  return h==='register'?'register':'login';
@@ -14,9 +14,26 @@ function showErr(msg){
 }
 function setRulesBanner(){
  if(rulesWarn)return; rulesWarn=true;
- const b=document.createElement('div'); b.style.cssText='position:sticky;top:0;background:#fff3cd;color:#856404;border-bottom:1px solid #ffeaa7;padding:8px 16px;font-size:13px;z-index:10';
- b.innerHTML='⚠ Firestore permissions denied. Open Firebase Console → Firestore Database → Rules and publish read/write rules (or temporary open rules for testing).';
+ const b=document.createElement('div'); b.id='rulesBanner'; b.style.cssText='position:sticky;top:0;background:#fff3cd;color:#856404;border-bottom:1px solid #ffeaa7;padding:8px 16px;font-size:13px;z-index:10;display:flex;align-items:center;justify-content:space-between';
+ b.innerHTML='<span>⚠ Firestore permissions denied. Open Firebase Console → Firestore Database → Rules and publish read/write rules (or temporary open rules for testing).</span><button class="g" style="padding:2px 10px;font-size:12px" onclick="document.getElementById(\'rulesBanner\')&&document.getElementById(\'rulesBanner\').remove()">Dismiss</button>';
  document.body.insertBefore(b, document.body.firstChild);
+}
+function clearRulesBanner(){ rulesWarn=false; const b=document.getElementById('rulesBanner'); if(b)b.remove(); }
+function detachDataSubs(){
+ if(dataSubs){ dataSubs.forEach(u=>{try{u()}catch(e){}}); dataSubs=null; }
+ dataSubsUid=null;
+}
+function attachDataSubs(userUid){
+ if(dataSubsUid===userUid)return;
+ detachDataSubs();
+ dataSubsUid=userUid;
+ dataSubs=['staff','punches','notes','evals','settings'].map(n=>db.collection(n).onSnapshot(
+   s=>{data[n]=s.docs.map(d=>({id:d.id,...d.data()}));render()},
+   err=>{
+     if(err && (err.code==='permission-denied'||err.code==='unauthenticated') && !!uid) setRulesBanner();
+     console.warn('snapshot', n, err);
+   }
+ ));
 }
 async function init(){
  authMode = authModeFromHash();
@@ -27,15 +44,10 @@ async function init(){
   initDone=true; clearTimeout(t);
   auth.onAuthStateChanged(user => {
     uid = user ? user.uid : null;
+    if(!uid){ clearRulesBanner(); detachDataSubs(); }
+    else{ attachDataSubs(uid); }
     render();
   });
-  ['staff','punches','notes','evals','settings'].forEach(n=>db.collection(n).onSnapshot(
-    s=>{data[n]=s.docs.map(d=>({id:d.id,...d.data()}));render()},
-    err=>{
-      if(err && (err.code==='permission-denied'||err.code==='unauthenticated')) setRulesBanner();
-      console.warn('snapshot', n, err);
-    }
-  ));
   setInterval(()=>{const c=$('#clk');if(c)c.textContent=new Date().toLocaleTimeString()},1000);
  }catch(err){clearTimeout(t);showErr(err.message||String(err));}
 }
