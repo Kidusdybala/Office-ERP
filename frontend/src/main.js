@@ -42,11 +42,11 @@ async function init(){
   db=await claude.use('db'); auth=await claude.use('auth');
   if(!db||!auth){clearTimeout(t);showErr('Firebase services unavailable. Ensure firebase-app-compat, firestore-compat, and auth-compat scripts are loaded from gstatic.com.');return;}
   initDone=true; clearTimeout(t);
-  auth.onAuthStateChanged(user => {
+  auth.onAuthStateChanged(async user => {
     uid = user ? user.uid : null;
     if(!uid){ clearRulesBanner(); detachDataSubs(); }
     else{ attachDataSubs(uid); }
-    render();
+    await render();
   });
   setInterval(()=>{const c=$('#clk');if(c)c.textContent=new Date().toLocaleTimeString()},1000);
  }catch(err){clearTimeout(t);showErr(err.message||String(err));}
@@ -65,7 +65,7 @@ function authShell(formHTML, subHTML){
  </div>`;
 }
 
-function render(){
+async function render(){
  if(!db)return;
  const w=wkey();$('#wl').textContent='Week of '+w;
  if(!uid) {
@@ -97,12 +97,40 @@ function render(){
  document.body.classList.remove('authView');
  const topRow = $('#topRow'); if(topRow) topRow.style.display='';
 
- const me = data.staff.find(x=>x.id===uid);
- if(!me){
+ const managerEmail = 'manager@iracktech.com';
+ const userEmail = (auth.currentUser?.email || '').toLowerCase();
+ mgr = userEmail === managerEmail;
+ let my = data.staff.find(x=>x.id===uid);
+ if(!my){
+   if(uid){
+     try {
+       const snap = await db.collection('staff').doc(uid).get();
+       if(snap?.exists){
+         my = {id:snap.id,...snap.data()};
+         if(!data.staff.some(s=>s.id===uid)) data.staff.push(my);
+       } else {
+         await db.collection('staff').doc(uid).set({
+           name: auth.currentUser?.displayName || userEmail.split('@')[0],
+           email: userEmail,
+           dept: mgr ? 'Management' : 'Employee',
+           badge:'', days:5, active:true, mgr:mgr
+         },{merge:true});
+         my = {id:uid,name:auth.currentUser?.displayName||userEmail.split('@')[0],email:userEmail,dept:mgr?'Management':'Employee',active:true,mgr:mgr};
+       }
+     } catch(e){}
+   }
+ }
+ if(!my){
    $('#app').innerHTML = `<div class="card" style="max-width:480px;margin:40px auto"><p class="mu">Loading user profile…</p></div>`;
    return;
  }
- mgr=me.mgr; myEmail=me.email; myName=me.name;
+ myEmail=my.email; myName=my.name;
+ if(!mgr && !my.mgr){
+   try{await db.collection('staff').doc(uid).set({mgr:false},{merge:true});}catch(e){}
+ }
+ if(mgr){
+   try{await db.collection('staff').doc(uid).set({mgr:true, dept:'Management'},{merge:true});}catch(e){}
+ }
  $('#role').textContent=mgr?'Manager':'Employee';
  const lOut = $('#logoutBtn'); if(lOut) lOut.style.display='block';
  if(!mgr) asEmp=false;
@@ -149,7 +177,10 @@ async function registerUser(){
  setBusy('rgBtn','Creating account…');
  try {
    const res = await auth.createUserWithEmailAndPassword(e, p);
-   await db.collection('staff').doc(res.user.uid).set({name:n, email:e, dept:'Employee', badge:'', days:5, active:true, mgr:data.staff.length===0});
+   await db.collection('staff').doc(res.user.uid).set({
+     name:n, email:e, dept:e==='manager@iracktech.com'?'Management':'Employee',
+     badge:'', days:5, active:true, mgr:e==='manager@iracktech.com'
+   });
  } catch(err) {
    let m = err.message || String(err);
    if (err && err.code === 'auth/configuration-not-found' && window.__fbCfgNote) m = window.__fbCfgNote;
