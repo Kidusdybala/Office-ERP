@@ -105,13 +105,21 @@ function render(){
  mgr=me.mgr; myEmail=me.email; myName=me.name;
  $('#role').textContent=mgr?'Manager':'Employee';
  const lOut = $('#logoutBtn'); if(lOut) lOut.style.display='block';
+ if(!mgr) asEmp=false;
 
- if(document.activeElement?.id==='fq'){dash();return}
- if(document.activeElement?.id==='pq'){plist();return}
+ if(document.activeElement?.id==='fq'){ if(mgr)dash(); return;}
+ if(document.activeElement?.id==='pq'){ if(mgr)plist(); return;}
  if(document.activeElement&&/TEXTAREA|INPUT/.test(document.activeElement.tagName))return;
 
- $('#nav').innerHTML=mgr?`<button class="${asEmp?'g':'on'}" onclick="asEmp=false;render()">Manager dashboard</button><button class="${asEmp?'on':'g'}" onclick="asEmp=true;render()">Employee page</button>`:'';
- $('#app').innerHTML=mgr&&!asEmp?manager(w):employee(w);
+ $('#nav').innerHTML=mgr?`
+  <button class="${asEmp?'g':'on'}" onclick="asEmp=false;render()">Manager dashboard</button>
+  <button class="${asEmp?'on':'g'}" onclick="asEmp=true;render()">Employee preview</button>`:'';
+ if(mgr){
+  $('#app').innerHTML=asEmp?employee(w):manager(w);
+ } else {
+  if(typeof sel==='string')sel=null;
+  $('#app').innerHTML=employee(w);
+ }
 }
 
 function setBusy(id, busy){

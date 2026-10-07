@@ -1,4 +1,5 @@
-function employee(w){const s=data.staff.find(x=>x.id===uid);
+function employee(w){if(mgr&&!asEmp)return`<div class="card" style="max-width:520px;margin:40px auto"><h2>Managers use the Manager dashboard</h2><p class="mu">Click <b>Employee preview</b> in the top bar if you want to see this view, or switch back to Manager dashboard.</p><div class="row" style="gap:10px;justify-content:center"><button class="on" onclick="asEmp=false;render()">Go to Manager dashboard</button><button class="g" onclick="asEmp=true;render()">Continue preview Employee page</button></div></div>`;
+ const s=data.staff.find(x=>x.id===uid);
  if(!s)return`<p>Loading...</p>`;
  if(s.active===false)return`<div class="card" style="max-width:460px;margin:30px auto"><h2>Account deactivated</h2><p class="mu">Please contact your manager.</p></div>`;
  const st=stats(s,w),isIn=status(uid),today=dk(new Date()),tp=punchesOf(uid,w).filter(p=>dk(new Date(p.ts))===today);

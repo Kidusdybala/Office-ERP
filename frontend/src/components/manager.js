@@ -1,4 +1,4 @@
-function manager(w){
+function manager(w){if(!mgr)return`<div class="card" style="max-width:520px;margin:40px auto"><h2>Access denied</h2><p class="mu">This dashboard is for managers only.</p></div>`;
  const tabs=`<div class="tabs">${[['team','Team overview'],['people','Employees'],['detail','Employee detail'],['device','Hikvision device']].map(([k,l])=>`<button class="${view===k?'on':'g'}" onclick="view='${k}';render()">${l}</button>`).join('')}</div>`;
  if(view==='device')return tabs+device();
  if(view==='people')return tabs+people();
