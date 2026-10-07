@@ -2,7 +2,7 @@
  * Hikvision DS-K3B411SX ↔ Firestore + ERP Bridge
  *
  * Runs locally on the same LAN as the turnstile.
- * Polls /ISAPI/AccessControl/AcsEvent every 30 s,
+ * Polls /ISAPI/AccessControl/AcsEvent every  every 30 s,
  * matches employeeNo/cardNo → ERP staff badge_number (with Firestore fallback),
  * and writes punches with src:"device" to both Firestore and the ERP database.
  *
@@ -16,7 +16,7 @@
  *   POLL_MS       Poll interval in ms (default: 30000)
  *   GOOGLE_APPLICATION_CREDENTIALS  Path to Firebase service-account JSON
  *                                   (or set FIREBASE_* vars below for inline config)
- *   DB_HOST       PostgreSQL host (default: localhost)
+ *   DB_HOST       PostgreSQL host (optional — if present, punches also go to ERP DB)
  *   DB_PORT       PostgreSQL port (default: 5432)
  *   DB_NAME       PostgreSQL database name (default: office_erp)
  *   DB_USER       PostgreSQL user (default: postgres)
@@ -26,15 +26,32 @@
 'use strict';
 
 require('dotenv').config();
-const http    = require('http');
-const https   = require('https');
 const admin   = require('firebase-admin');
+const fs      = require('fs');
+const path    = require('path');
+const axios   = require('axios');
+const https   = require('https');
+
+// RFC 2617 / RFC 7616 Digest auth client, proven with Hikvision cameras/controllers.
+const AxiosDigest = require('axios-digest').default;
 
 // ── Firebase init ────────────────────────────────────────────────────────────
 // Use a service-account JSON file:
 //   export GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceAccount.json
 // OR inline the values in .env as FIREBASE_PROJECT_ID / FIREBASE_CLIENT_EMAIL /
 // FIREBASE_PRIVATE_KEY and uncomment the credential block below.
+
+let saProjectId = null;
+const saPath = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+if (saPath) {
+  try {
+    const absSaPath = path.isAbsolute(saPath) ? saPath : path.resolve(process.cwd(), saPath);
+    if (fs.existsSync(absSaPath)) {
+      const sa = JSON.parse(fs.readFileSync(absSaPath, 'utf8'));
+      saProjectId = sa.project_id || null;
+    }
+  } catch (e) { /* ignore parse failures; SDK will handle its own validation */ }
+}
 
 if (!admin.apps.length) {
   const credential = process.env.FIREBASE_PRIVATE_KEY
@@ -47,11 +64,28 @@ if (!admin.apps.length) {
 
   admin.initializeApp({
     credential,
-    projectId: process.env.FIREBASE_PROJECT_ID || 'office-erp-c0a45',
+    projectId: process.env.FIREBASE_PROJECT_ID || saProjectId || 'office-erp-c0a45',
   });
 }
 
 const db = admin.firestore();
+
+// ── ERP Postgres helpers (optional — only active when DB_HOST + DB_PASS are set) ──
+let query = null;
+let createPunch = null;
+let getByStaffAndDay = null;
+const pgActive = !!(process.env.DB_HOST && process.env.DB_PASS);
+if (pgActive) {
+  try {
+    const { query: pgQuery } = require('./config/db');
+    query = pgQuery;
+    const P = require('./models/Punch');
+    createPunch = P.create;
+    getByStaffAndDay = P.getByStaffAndDay;
+  } catch (e) {
+    console.warn('[warn] ERP DB helpers failed to load, Firestore-only mode:', e.message);
+  }
+}
 
 // ── Config ───────────────────────────────────────────────────────────────────
 const HIK_HOST = process.env.HIK_HOST || '192.168.1.8';
@@ -62,81 +96,92 @@ const POLL_MS  = parseInt(process.env.POLL_MS || '30000', 10);
 // Track the timestamp of the last event we processed so we don't re-import.
 let lastEventTime = new Date(Date.now() - POLL_MS * 2); // start from 2 polls ago
 
-// ── Digest-auth helper ───────────────────────────────────────────────────────
-// Hikvision devices use HTTP Digest authentication.
-const { createHash } = require('crypto');
+// ── HTTP client (digest auth via axios-digest, RFC 2617 / RFC 7616 compliant,
+//    with optional Basic-auth fallback for older firmware that accepts either) ──
+const AUTH_TYPE = (process.env.HIK_AUTH_TYPE || 'auto').toLowerCase(); // auto | digest | basic
 
-function md5(s) { return createHash('md5').update(s).digest('hex'); }
-
-function buildDigestHeader(method, uri, wwwAuth, user, pass) {
-  const realm  = (wwwAuth.match(/realm="([^"]*)"/) || [])[1] || '';
-  const nonce  = (wwwAuth.match(/nonce="([^"]*)"/) || [])[1] || '';
-  const qop    = (wwwAuth.match(/qop="?([^",]*)"?/) || [])[1] || '';
-  const nc     = '00000001';
-  const cnonce = Math.random().toString(36).slice(2, 10);
-  const ha1    = md5(`${user}:${realm}:${pass}`);
-  const ha2    = md5(`${method}:${uri}`);
-  const resp   = qop
-    ? md5(`${ha1}:${nonce}:${nc}:${cnonce}:${qop}:${ha2}`)
-    : md5(`${ha1}:${nonce}:${ha2}`);
-
-  let h = `Digest username="${user}", realm="${realm}", nonce="${nonce}", uri="${uri}", response="${resp}"`;
-  if (qop)    h += `, qop=${qop}, nc=${nc}, cnonce="${cnonce}"`;
-  return h;
+function basicAuthHeader(user, pass) {
+  return 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');
 }
 
-// ── HTTP request with Digest auth (2-step) ───────────────────────────────────
-// Step 1: GET /ISAPI/System/deviceInfo to harvest the Digest nonce (safe GET endpoint).
-// Step 2: Send the real request (any method/path) with the harvested nonce.
-function request(method, path, body) {
-  return new Promise((resolve, reject) => {
-    const rawHost = HIK_HOST.replace(/^https?:\/\//, '');
-    const [host, port] = rawHost.includes(':') ? rawHost.split(':') : [rawHost, 80];
-    const proto   = HIK_HOST.startsWith('https') ? https : http;
-    const bodyBuf = body ? Buffer.from(JSON.stringify(body)) : null;
-
-    // Step 1: GET a known-good endpoint to receive 401 + WWW-Authenticate
-    const challengePath = '/ISAPI/System/deviceInfo';
-    const opts1 = { host, port: +port, path: challengePath, method: 'GET',
-      headers: { 'Accept': 'application/json' } };
-
-    const step1 = proto.request(opts1, (res) => {
-        const wwwAuth = res.headers['www-authenticate'] || '';
-        res.resume(); // drain body
-        if (res.statusCode !== 401) {
-          if (res.statusCode === 200 && !wwwAuth) {
-            // Device has no auth — just do the real request directly
-            return doRequest(null);
-          }
-          return reject(new Error(`Expected 401 on auth challenge, got ${res.statusCode}`));
-        }
-        if (!wwwAuth) return reject(new Error('No WWW-Authenticate header from device'));
-        doRequest(wwwAuth);
-      });
-    step1.on('error', reject);
-    step1.end();
-
-    function doRequest(wwwAuth) {
-        const headers2 = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
-        if (wwwAuth) headers2['Authorization'] = buildDigestHeader(method, path, wwwAuth, HIK_USER, HIK_PASS);
-        if (bodyBuf) headers2['Content-Length'] = bodyBuf.length;
-
-        const step2 = proto.request({ host, port: +port, path, method, headers: headers2 }, (res2) => {
-          let data = '';
-          res2.on('data', c => data += c);
-          res2.on('end', () => {
-            if (res2.statusCode >= 400) {
-              return reject(new Error(`Device ${res2.statusCode}: ${data.slice(0, 300)}`));
-            }
-            try { resolve(JSON.parse(data)); }
-            catch { resolve(data); }
-          });
-        });
-        step2.on('error', reject);
-        if (bodyBuf) step2.write(bodyBuf);
-        step2.end();
-    }
+let _axiosInstance = null;
+function getAxiosInstance() {
+  if (_axiosInstance) return _axiosInstance;
+  const rawHost = HIK_HOST.replace(/^https?:\/\//, '');
+  const isHttps = HIK_HOST.startsWith('https');
+  const baseURL = `${isHttps ? 'https' : 'http'}://${rawHost}`;
+  _axiosInstance = axios.create({
+    baseURL,
+    timeout: 15000,
+    httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+    transitional: { silentJSONParsing: false, forcedJSONParsing: false, clarifyTimeoutError: false },
   });
+  _axiosInstance.defaults.headers.common['Accept'] = 'application/json,text/html,application/xml;q=0.9,*/*;q=0.8';
+  return _axiosInstance;
+}
+
+let _axiosDigest = null;
+function getAxiosDigest() {
+  if (_axiosDigest) return _axiosDigest;
+  _axiosDigest = new AxiosDigest(HIK_USER, HIK_PASS, getAxiosInstance());
+  return _axiosDigest;
+}
+
+async function request(method, reqPath, body) {
+  const client = getAxiosInstance();
+  const debug = process.env.HIK_DEBUG === '1';
+  if (debug) console.error(`[debug] ${method} ${reqPath} (auth=${AUTH_TYPE})`);
+
+  const callConfig = {
+    method,
+    url: reqPath,
+    headers: {},
+  };
+  if (body) {
+    callConfig.data = body;
+    callConfig.headers['Content-Type'] = 'application/json';
+  }
+
+  // Try Basic first if configured
+  if (AUTH_TYPE === 'basic' || AUTH_TYPE === 'auto') {
+    try {
+      callConfig.headers['Authorization'] = basicAuthHeader(HIK_USER, HIK_PASS);
+      const resp = await client.request(callConfig);
+      if (resp.status < 400) return normalize(resp.data);
+      if (debug) console.error(`[debug] Basic auth returned ${resp.status}, trying Digest`);
+      delete callConfig.headers['Authorization'];
+    } catch (err) {
+      const st = err?.response?.status;
+      if (debug) console.error(`[debug] Basic auth error: ${st || err.message}`);
+      if (st !== 401 && st !== 403) throw err;
+    }
+  }
+
+  // Try Digest (either primary, or fallback when auto + basic failed)
+  if (AUTH_TYPE !== 'basic') {
+    const dig = getAxiosDigest();
+    let resp;
+    if (method === 'GET')       resp = await dig.get(reqPath);
+    else if (method === 'POST') resp = await dig.post(reqPath, body, { headers: callConfig.headers });
+    else throw new Error(`Unsupported HTTP method: ${method}`);
+    return normalize(resp.data);
+  }
+
+  throw new Error('No auth strategy succeeded');
+}
+
+function normalize(data) {
+  if (!data) return '';
+  if (typeof data === 'string') {
+    try { return JSON.parse(data); } catch { return data; }
+  }
+  return data;
+}
+
+// ── DeviceInfo check on startup ──────────────────────────────────────────────────────
+async function checkDevice() {
+  const info = await request('GET', '/ISAPI/System/deviceInfo');
+  return typeof info === 'string' ? info.slice(0, 300) : info;
 }
 
 // ── Fetch events from device ─────────────────────────────────────────────────
@@ -158,8 +203,43 @@ async function fetchEvents(since) {
   };
 
   const res = await request('POST', '/ISAPI/AccessControl/AcsEvent?format=json', body);
-  const list = res?.AcsEvent?.InfoList || [];
-  return { events: list, now };
+
+  // Hikvision returns either {AcsEvent:{InfoList:[...]}} (JSON) or XML.
+  let events = [];
+  if (res && typeof res === 'object') {
+    events = res?.AcsEvent?.InfoList || res?.InfoList || [];
+  } else if (typeof res === 'string' && res.trim().startsWith('<?xml')) {
+    if (!process.env.HIK_NO_DUMP) {
+      try { fs.writeFileSync(path.join(__dirname, '..', 'last-event.xml'), res); } catch {}
+      process.env.HIK_NO_DUMP = '1'; // only dump once
+    }
+    // Try-parse XML to JS using a minimal regex extractor
+    events = parseEventsFromXml(res);
+  }
+  return { events, now, raw: res };
+}
+
+// ── Minimal XML event extractor (used as fallback for Hikvision XML responses
+function parseEventsFromXml(xml) {
+  const blocks = xml.split(/<Info>|/g).slice(1).map(s => s.replace(/<\/Info>.*$/, ''));
+  const out = [];
+  for (const b of blocks) {
+    const get = tag => {
+      const m = b.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`));
+      return m ? m[1].trim() : '';
+    };
+    const ev = {
+      major:          +get('major') || 0,
+      minor:          +get('minor') || 0,
+      time:            get('time')  || get('dateTime') || get('Time') || '',
+      employeeNoString: get('employeeNoString') || get('employeeNo') || '',
+      employeeNo:      get('employeeNo') || '',
+      cardNo:          get('cardNo') || '',
+      name:            get('name') || '',
+    };
+    out.push(ev);
+  }
+  return out;
 }
 
 // ── Match event → ERP staff (with Firestore fallback) ─────────────────────────
@@ -198,38 +278,37 @@ async function writePunch(staffDoc, ts) {
 
   // Determine in/out by counting existing punches that day
   let dayCount = 0;
-  try {
-    const erpPunches = staffDoc.erpId
-      ? await getByStaffAndDay(staffDoc.erpId, day)
-      : [];
-    dayCount = erpPunches.length;
-  } catch (err) {
-    console.warn('[warn] ERP punch count failed, using Firestore:', err.message);
-    if (!admin.apps.length) {
-      console.error('[error] No Firestore available for fallback count');
-    } else {
+  if (pgActive && getByStaffAndDay && staffDoc.erpId) {
+    try {
+      const erpPunches = await getByStaffAndDay(staffDoc.erpId, day);
+      dayCount = erpPunches.length;
+    } catch (err) {
+      console.warn('[warn] ERP punch count failed, using Firestore:', err.message);
+    }
+  }
+  // Fallback: Firestore count
+  if (!dayCount) {
+    try {
       const snap = await db.collection('punches')
         .where('uid', '==', uid)
         .get();
       dayCount = snap.docs.filter(d => dk(new Date(d.data().ts)) === day).length;
-    }
+    } catch {}
   }
   const type = dayCount % 2 === 0 ? 'in' : 'out';
 
   // Write to Firestore for frontend compatibility
-  if (admin.apps.length) {
-    try {
-      const docId = `${uid}_${ts}`;
-      await db.collection('punches').doc(docId).set({
-        uid, ts, type, src: 'device'
-      });
-    } catch (err) {
-      console.warn('[warn] Firestore write failed:', err.message);
-    }
+  try {
+    const docId = `${uid}_${ts}`;
+    await db.collection('punches').doc(docId).set({
+      uid, ts, type, src: 'device'
+    });
+  } catch (err) {
+    console.warn('[warn] Firestore write failed:', err.message);
   }
 
-  // Write to ERP database
-  if (staffDoc.erpId) {
+  // Write to ERP database (optional)
+  if (pgActive && createPunch && staffDoc.erpId) {
     try {
       await createPunch(staffDoc.erpId, ts, type, 'device');
     } catch (err) {
@@ -240,7 +319,7 @@ async function writePunch(staffDoc, ts) {
   console.log(`[punch] ${staffDoc.name || uid}  ${type}  ${new Date(ts).toISOString()}`);
 }
 
-// ── Main poll loop ────────────────────────────────────────────────────────────
+// ── Main poll loop ────────────────────────────────────────────────────────
 const seen = new Set(); // deduplicate within session
 
 async function poll() {
@@ -288,12 +367,40 @@ async function poll() {
   }
 }
 
-// ── Startup ───────────────────────────────────────────────────────────────────
-console.log(`Hikvision Bridge starting`);
-console.log(`  Device : http://${HIK_HOST}`);
-console.log(`  Poll   : every ${POLL_MS / 1000}s`);
-console.log(`  Firebase: ${process.env.FIREBASE_PROJECT_ID || 'office-erp-c0a45'}`);
-console.log('');
+// ── Startup ──────────────────────────────────────────────────────────────────
+(async function start() {
+  console.log(`Hikvision Bridge starting`);
+  console.log(`  Device  : http://${HIK_HOST}`);
+  console.log(`  User    : ${HIK_USER}`);
+  console.log(`  Poll    : every ${POLL_MS / 1000}s`);
+  console.log(`  Firebase: ${process.env.FIREBASE_PROJECT_ID || saProjectId || 'office-erp-c0a45'}`);
+  if (pgActive) {
+    console.log(`  ERP DB  : ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}/${process.env.DB_NAME || 'office_erp'}`);
+  } else {
+    console.log(`  ERP DB  : (disabled — set DB_HOST and DB_PASS to enable)`);
+  }
+  if (saPath) {
+    const absSa = path.isAbsolute(saPath) ? saPath : path.resolve(process.cwd(), saPath);
+    const found = fs.existsSync(absSa);
+    console.log(`  SA JSON : ${found ? 'found' : 'MISSING'} — ${absSa}`);
+  }
+  console.log('');
 
-poll(); // run immediately on start
-setInterval(poll, POLL_MS);
+  try {
+    const info = await checkDevice();
+    console.log('[ok] Device reachable and authenticated. deviceInfo:');
+    const snippet = typeof info === 'string' ? info.replace(/\s+/g, ' ').slice(0, 200) : JSON.stringify(info).slice(0, 200);
+    console.log('      ' + snippet);
+  } catch (e) {
+    // Warn but DON'T abort — device may temporarily unavailable; poll loop will keep trying
+    console.warn('[warn] Initial device check failed (continuing to poll anyway):');
+    console.warn('       ' + e.message);
+    console.warn('       → If this persists, double-check HIK_HOST / HIK_USER / HIK_PASS in backend/.env');
+    console.warn('       → This script must run from a machine on the SAME LAN as the device');
+    console.warn('         (cannot access a private 192.168.x.x IP from outside the office network)');
+  }
+  console.log('');
+
+  poll(); // run immediately on start
+  setInterval(poll, POLL_MS);
+})().catch(e => { console.error(e); process.exit(1); });
