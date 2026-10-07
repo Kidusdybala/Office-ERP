@@ -10,8 +10,8 @@ const firebaseConfig = {
 
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-const auth = firebase.auth();
+db = firebase.firestore();
+auth = firebase.auth();
 
 // Shim to replace mock-claude.js with live Firebase
 window.claude = {
