@@ -5,8 +5,11 @@
 <header><div class="row"><h1>⏱ WorkTime ERP</h1><span class="badge" id="role"></span></div>
 <div class="row" id="nav"></div><div class="row"><button class="g" onclick="wk--;render()">‹</button><b id="wl"></b><button class="g" onclick="wk=Math.min(0,wk+1);render()">›</button><button class="g" onclick="logout()" id="logoutBtn" style="display:none;margin-left:10px">Logout</button></div></header>
 <main id="app"><p class="mu">Loading…</p></main>
-<!-- LOCAL DEV ONLY: fakes window.claude (db + user) using localStorage -->
-<script src="src/mock-claude.js"></script>
+<!-- Firebase SDKs -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<!-- Initialize Realtime Firebase -->
+<script src="src/firebase-init.js"></script>
 <script src="src/globals.js"></script>
 <script src="src/utils.js"></script>
 <script src="src/api.js"></script>
