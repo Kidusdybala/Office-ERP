@@ -3,11 +3,20 @@ function employee(w){if(mgr&&!asEmp)return`<div class="card" style="max-width:52
  if(!s)return`<p>Loading...</p>`;
  if(s.active===false)return`<div class="card" style="max-width:460px;margin:30px auto"><h2>Account deactivated</h2><p class="mu">Please contact your manager.</p></div>`;
  const st=stats(s,w),isIn=status(uid),today=dk(new Date()),tp=punchesOf(uid,w).filter(p=>dk(new Date(p.ts))===today);
+ const viewDayDate=(()=>{const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()+dOffset);return d;})();
+ const viewDay=dk(viewDayDate),viewDayLabel=viewDayDate.toLocaleDateString([],{weekday:'long',month:'short',day:'numeric',year:'numeric'});
+ const daysFromToday=Math.round((viewDayDate-new Date(today+'T00:00:00'))/864e5);
+ const planLabel=daysFromToday===0?"Today's plan":daysFromToday<0?`Plan — ${viewDayLabel}`:`Plan — ${viewDayLabel}`;
+ const reportLabel=daysFromToday===0?"Today's report":daysFromToday<0?`Report — ${viewDayLabel}`:`Report — ${viewDayLabel}`;
+ const weekStart=new Date(w+'T00:00:00'),weekEnd=new Date(weekStart);weekEnd.setDate(weekEnd.getDate()+6);
+ const weekLabel=weekStart.toLocaleDateString([],{month:'short',day:'numeric'})+' – '+weekEnd.toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'});
  return`<div class="grid"><div class="card"><div class="mu">Hello, ${esc(s.name)}</div><div class="clock" id="clk">${new Date().toLocaleTimeString()}</div><p class="mu" style="text-align:center">${isIn?'You are punched IN':'You are punched OUT'}</p>
  <button class="punch ${isIn?'out':'in'}" onclick="punch()">${isIn?'Punch OUT':'Punch IN'}</button>
  <p class="mu">Shift <b>${shift().start} – ${shift().end}</b></p><p class="mu">Today: ${tp.length?tp.map(p=>`<span class="dot" style="background:${p.type==='in'?'var(--ok)':'var(--er)'}"></span>${p.type.toUpperCase()} ${hm(p.ts)}`).join(' &nbsp; '):'no punches yet'}</p></div>
  <div class="card"><h2>Attendance this week</h2><div class="row" style="justify-content:space-around">${ring(st.att)}<div><div class="big">${st.full}/${st.exp}</div><div class="mu">days completed (in + out)<br>${st.ps.length} punches</div><div style="margin-top:8px">${st.hrs.toFixed(1)} h worked · Punctuality <b>${Math.round(st.pun)}%</b></div></div></div><div style="margin-top:8px">${chips(st,w)}</div></div>
  <div class="card"><h2>My performance</h2><div class="big" style="color:${col(st.score)}">${Math.round(st.score)}</div><div class="mu">Score % = attendance 40 + punctuality 20 + reports 20 + manager rating 20</div><p>Punctuality: ${Math.round(st.pun)}% ${bar(st.pun)}</p><p>Reporting: ${Math.round(st.rep)}% ${bar(st.rep)}</p><p>Manager rating: ${st.rt?st.rt.toFixed(1)+' / 5':'not rated yet'}</p>${st.e?.comment?`<p class="mu">“${esc(st.e.comment)}”</p>`:''}</div></div>
  <div class="card wrap" style="margin-top:14px"><h2>My time log — shift ${shift().start} to ${shift().end}</h2>${timeTable(st,w)}</div>
- <h2 style="margin-top:20px">Daily</h2><div class="grid">${noteBox('daily-plan',today,'Today’s plan','What will you work on today?')}${noteBox('daily-report',today,'Today’s report','What did you complete?')}</div>
- <h2 style="margin-top:20px">Weekly</h2><div class="grid">${noteBox('weekly-plan',w,'Weekly plan','Goals for this week')}${noteBox('weekly-report',w,'Weekly report','Results, blockers, learnings')}</div>`}
+ <div class="row" style="justify-content:space-between;align-items:center;margin-top:20px"><h2 style="margin:0">Daily</h2><div class="row"><button class="g" onclick="dOffset--;render()">‹</button><b style="min-width:180px;text-align:center">${viewDayLabel}</b><button class="g" onclick="dOffset=Math.min(0,dOffset+1);render()">›</button></div></div>
+ <div class="grid">${noteBox('daily-plan',viewDay,planLabel,'What will you work on?')}${noteBox('daily-report',viewDay,reportLabel,'What did you complete?')}</div>
+ <div class="row" style="justify-content:space-between;align-items:center;margin-top:20px"><h2 style="margin:0">Weekly</h2><div class="row"><button class="g" onclick="wk--;render()">‹</button><b style="min-width:180px;text-align:center">${weekLabel}</b><button class="g" onclick="wk=Math.min(0,wk+1);render()">›</button></div></div>
+ <div class="grid">${noteBox('weekly-plan',w,`Weekly plan — ${weekLabel}`,'Goals for this week')}${noteBox('weekly-report',w,`Weekly report — ${weekLabel}`,'Results, blockers, learnings')}</div>`}

@@ -20,6 +20,28 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px 8px;text-align:left;
 .wrap{overflow-x:auto}.bar{height:8px;border-radius:9px;background:var(--bd);overflow:hidden;min-width:70px}.bar i{display:block;height:100%}
 .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}.big{font-size:30px;font-weight:700}
 .chip{font-size:12px;padding:2px 8px;border-radius:99px;border:1px solid var(--bd);margin:2px 2px 0 0;display:inline-block}.chip.full{background:var(--ok);color:#fff;border:0}.chip.part{background:var(--wa);color:#fff;border:0}.chip.none{background:var(--er);color:#fff;border:0}.chip.fut{color:var(--mu)}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+
+/* --- Full-page dedicated auth layout --- */
+body.authView{display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--card);padding:24px;}
+body.authView header{display:none !important}
+body.authView main{max-width:420px;width:100%;margin:0;padding:0}
+.authShell{background:var(--card);border:1px solid var(--bd);border-radius:18px;box-shadow:0 10px 30px rgba(15,23,42,.08),0 2px 8px rgba(15,23,42,.04);padding:28px 26px;width:100%}
+.authShell .brandRow{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.authShell .brandRow .logo{width:38px;height:38px;border-radius:10px;background:var(--ac);color:#fff;display:grid;place-items:center;font-size:20px;font-weight:700}
+.authShell h2{font-size:22px;margin:2px 0 4px}
+.authShell .sub{color:var(--mu);font-size:14px;margin-bottom:20px}
+.authField{margin-bottom:14px;position:relative}
+.authField input{width:100%;height:48px;border-radius:12px;padding:14px 14px 14px 14px;border:1px solid var(--bd);background:var(--bg);font-size:15px;transition:border-color .15s,box-shadow .15s}
+.authField input:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px color-mix(in srgb, var(--ac) 22%, transparent)}
+.authField label{display:block;margin:6px 2px 0;font-size:12px;color:var(--mu)}
+.authField .pwToggle{position:absolute;right:10px;top:12px;border:0;background:transparent;color:var(--mu);cursor:pointer;padding:4px 8px;border-radius:8px;font-size:13px}
+.authField .pwToggle:hover{background:var(--bg)}
+.authBtn{width:100%;height:48px;border-radius:12px;background:var(--ac);color:#fff;font-weight:600;font-size:15px;margin-top:6px;border:0}
+.authBtn:disabled{opacity:.6;cursor:not-allowed}
+.authSubRow{display:flex;align-items:center;justify-content:space-between;margin-top:14px;color:var(--mu);font-size:14px}
+.authSubRow a,.authSubRow button.link{background:transparent;border:0;padding:0;color:var(--ac);font-weight:600;cursor:pointer;text-decoration:underline}
+.authShell .amWrap{min-height:18px;margin-top:10px;color:var(--er);font-size:13px}
+.authShell .footNote{text-align:center;color:var(--mu);font-size:12px;margin-top:16px}
 </style></head><body>
 <header><div class="row"><h1>⏱ WorkTime ERP</h1><span class="badge" id="role"></span></div>
 <div class="row" id="nav"></div><div class="row"><button class="g" onclick="wk--;render()">‹</button><b id="wl"></b><button class="g" onclick="wk=Math.min(0,wk+1);render()">›</button></div></header>
@@ -30,7 +52,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px 8px;text-align:left;
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script>
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let myEmail='',myName='',claiming=0,editId=null,pq='',rmArm=null,asEmp=false,F={q:'',d:'',f:'',s:'score'},db,uid,mgr=false,wk=0,view='team',sel=null,data={staff:[],punches:[],notes:[],evals:[],settings:[]},ev={q:[3,3,3]};
+let myEmail='',myName='',claiming=0,editId=null,pq='',rmArm=null,asEmp=false,F={q:'',d:'',f:'',s:'score'},db,auth,uid,mgr=false,wk=0,dOffset=0,view='team',sel=null,data={staff:[],punches:[],notes:[],evals:[],settings:[]},ev={q:[3,3,3]};
 
 const firebaseConfig = {
   apiKey: "AIzaSyDgPxSQ-zwTmna95q8zeojeok3f4hIZsEk",
@@ -42,14 +64,44 @@ const firebaseConfig = {
   measurementId: "G-WB1V31FM7P"
 };
 
+(function guardCompat() {
+  const missing = [];
+  if (typeof firebase === 'undefined') missing.push('firebase-app-compat (from gstatic)');
+  else {
+    if (typeof firebase.firestore !== 'function') missing.push('firebase-firestore-compat');
+    if (typeof firebase.auth !== 'function') missing.push('firebase-auth-compat');
+  }
+  if (missing.length) {
+    window.__fbLoadError = 'Missing Firebase scripts: ' + missing.join(', ') +
+      '. Verify https://www.gstatic.com/firebasejs/9.23.0/* is allowed by any content blocker / firewall.';
+  }
+})();
+
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 db = firebase.firestore();
 auth = firebase.auth();
+try {
+  // Ensure the compat auth delegate actually resolves; throws configuration-not-found
+  // early if Email/Password sign-in method is disabled in Firebase Console.
+  auth.languageCode = 'en';
+} catch (e) { window.__fbInitError = String(e && e.message || e); }
 
 // Shim to replace mock-claude.js with live Firebase
 window.claude = {
-  use: async (n) => n === 'db' ? db : n === 'auth' ? auth : null
+  use: async (n) => {
+    if (window.__fbLoadError) throw new Error(window.__fbLoadError);
+    if (n === 'db') return db;
+    if (n === 'auth') {
+      if (!auth || !auth.app || !auth.app.options || !auth.app.options.apiKey) {
+        throw new Error(window.__fbInitError ||
+          'Firebase Auth is not configured on the backend. Open Firebase Console → Authentication → Sign-in method and enable Email/Password. Also add this hostname to Authentication → Settings → Authorized domains: ' +
+          (location && location.hostname ? location.hostname : 'your Vercel domain'));
+      }
+      return auth;
+    }
+    return null;
+  }
 };
 
 const pad=n=>String(n).padStart(2,'0'),dk=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
@@ -94,20 +146,30 @@ async function saveShift(){await db.collection('settings').doc('shift').set({sta
 function leaderboard(w){const rows=data.staff.filter(s=>!s.mgr&&s.active!==false&&!s.id.startsWith('inv:')).map(s=>({s,...stats(s,w)})).sort((a,b)=>b.score-a.score).slice(0,5),m=['🥇','🥈','🥉'];
  return`<div class="card" style="margin-top:20px"><h2>🏆 Top performers — week of ${w}</h2>${rows.length?rows.map((r,i)=>`<div class="row" style="margin:10px 0"><span style="width:30px;font-size:20px">${m[i]||i+1}</span><div style="flex:1;min-width:150px"><b>${esc(r.s.name)}</b> <span class="mu">${esc(r.s.dept)}</span>${bar(r.score)}</div><div style="text-align:right"><b style="color:${col(r.score)};font-size:20px">${Math.round(r.score)}%</b><div class="mu">Attendance ${Math.round(r.att)}% · Punctual ${Math.round(r.pun)}%</div></div></div>`).join(''):'<p class="mu">No data yet.</p>'}</div>`}
 
-function employee(w){const s=data.staff.find(x=>x.id===uid);
+function employee(w){if(mgr&&!asEmp)return`<div class="card" style="max-width:520px;margin:40px auto"><h2>Managers use the Manager dashboard</h2><p class="mu">Click <b>Employee preview</b> in the top bar if you want to see this view, or switch back to Manager dashboard.</p><div class="row" style="gap:10px;justify-content:center"><button class="on" onclick="asEmp=false;render()">Go to Manager dashboard</button><button class="g" onclick="asEmp=true;render()">Continue preview Employee page</button></div></div>`;
+ const s=data.staff.find(x=>x.id===uid);
  if(!s)return`<p>Loading...</p>`;
  if(s.active===false)return`<div class="card" style="max-width:460px;margin:30px auto"><h2>Account deactivated</h2><p class="mu">Please contact your manager.</p></div>`;
  const st=stats(s,w),isIn=status(uid),today=dk(new Date()),tp=punchesOf(uid,w).filter(p=>dk(new Date(p.ts))===today);
+ const viewDayDate=(()=>{const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()+dOffset);return d;})();
+ const viewDay=dk(viewDayDate),viewDayLabel=viewDayDate.toLocaleDateString([],{weekday:'long',month:'short',day:'numeric',year:'numeric'});
+ const daysFromToday=Math.round((viewDayDate-new Date(today+'T00:00:00'))/864e5);
+ const planLabel=daysFromToday===0?"Today's plan":daysFromToday<0?`Plan — ${viewDayLabel}`:`Plan — ${viewDayLabel}`;
+ const reportLabel=daysFromToday===0?"Today's report":daysFromToday<0?`Report — ${viewDayLabel}`:`Report — ${viewDayLabel}`;
+ const weekStart=new Date(w+'T00:00:00'),weekEnd=new Date(weekStart);weekEnd.setDate(weekEnd.getDate()+6);
+ const weekLabel=weekStart.toLocaleDateString([],{month:'short',day:'numeric'})+' – '+weekEnd.toLocaleDateString([],{month:'short',day:'numeric',year:'numeric'});
  return`<div class="grid"><div class="card"><div class="mu">Hello, ${esc(s.name)}</div><div class="clock" id="clk">${new Date().toLocaleTimeString()}</div><p class="mu" style="text-align:center">${isIn?'You are punched IN':'You are punched OUT'}</p>
  <button class="punch ${isIn?'out':'in'}" onclick="punch()">${isIn?'Punch OUT':'Punch IN'}</button>
  <p class="mu">Shift <b>${shift().start} – ${shift().end}</b></p><p class="mu">Today: ${tp.length?tp.map(p=>`<span class="dot" style="background:${p.type==='in'?'var(--ok)':'var(--er)'}"></span>${p.type.toUpperCase()} ${hm(p.ts)}`).join(' &nbsp; '):'no punches yet'}</p></div>
  <div class="card"><h2>Attendance this week</h2><div class="row" style="justify-content:space-around">${ring(st.att)}<div><div class="big">${st.full}/${st.exp}</div><div class="mu">days completed (in + out)<br>${st.ps.length} punches</div><div style="margin-top:8px">${st.hrs.toFixed(1)} h worked · Punctuality <b>${Math.round(st.pun)}%</b></div></div></div><div style="margin-top:8px">${chips(st,w)}</div></div>
  <div class="card"><h2>My performance</h2><div class="big" style="color:${col(st.score)}">${Math.round(st.score)}</div><div class="mu">Score % = attendance 40 + punctuality 20 + reports 20 + manager rating 20</div><p>Punctuality: ${Math.round(st.pun)}% ${bar(st.pun)}</p><p>Reporting: ${Math.round(st.rep)}% ${bar(st.rep)}</p><p>Manager rating: ${st.rt?st.rt.toFixed(1)+' / 5':'not rated yet'}</p>${st.e?.comment?`<p class="mu">“${esc(st.e.comment)}”</p>`:''}</div></div>
  <div class="card wrap" style="margin-top:14px"><h2>My time log — shift ${shift().start} to ${shift().end}</h2>${timeTable(st,w)}</div>
- <h2 style="margin-top:20px">Daily</h2><div class="grid">${noteBox('daily-plan',today,'Today’s plan','What will you work on today?')}${noteBox('daily-report',today,'Today’s report','What did you complete?')}</div>
- <h2 style="margin-top:20px">Weekly</h2><div class="grid">${noteBox('weekly-plan',w,'Weekly plan','Goals for this week')}${noteBox('weekly-report',w,'Weekly report','Results, blockers, learnings')}</div>`}
+ <div class="row" style="justify-content:space-between;align-items:center;margin-top:20px"><h2 style="margin:0">Daily</h2><div class="row"><button class="g" onclick="dOffset--;render()">‹</button><b style="min-width:180px;text-align:center">${viewDayLabel}</b><button class="g" onclick="dOffset=Math.min(0,dOffset+1);render()">›</button></div></div>
+ <div class="grid">${noteBox('daily-plan',viewDay,planLabel,'What will you work on?')}${noteBox('daily-report',viewDay,reportLabel,'What did you complete?')}</div>
+ <div class="row" style="justify-content:space-between;align-items:center;margin-top:20px"><h2 style="margin:0">Weekly</h2><div class="row"><button class="g" onclick="wk--;render()">‹</button><b style="min-width:180px;text-align:center">${weekLabel}</b><button class="g" onclick="wk=Math.min(0,wk+1);render()">›</button></div></div>
+ <div class="grid">${noteBox('weekly-plan',w,`Weekly plan — ${weekLabel}`,'Goals for this week')}${noteBox('weekly-report',w,`Weekly report — ${weekLabel}`,'Results, blockers, learnings')}</div>`}
 
-function manager(w){
+function manager(w){if(!mgr)return`<div class="card" style="max-width:520px;margin:40px auto"><h2>Access denied</h2><p class="mu">This dashboard is for managers only.</p></div>`;
  const tabs=`<div class="tabs">${[['team','Team overview'],['people','Employees'],['detail','Employee detail'],['device','Hikvision device']].map(([k,l])=>`<button class="${view===k?'on':'g'}" onclick="view='${k}';render()">${l}</button>`).join('')}</div>`;
  if(view==='device')return tabs+device();
  if(view==='people')return tabs+people();
@@ -171,87 +233,199 @@ async function imp(){try{const a=JSON.parse($('#imp').value).map(e=>({s:data.sta
   await db.collection('punches').doc(e.s.id+'_'+e.t).set({uid:e.s.id,ts:e.t,type:c%2?'out':'in',src:'device'});seen[k]++;n++}
  $('#impr').textContent=`Imported ${n}, skipped ${m} (unknown badge or bad time).`}catch(x){$('#impr').textContent='Invalid JSON'}}
 
-let authMode = 'login', auth;
+let authMode = 'login', initDone=false, rulesWarn=false, dataSubs=null, dataSubsUid=null;
+function authModeFromHash(){
+ const h=(location.hash||'').replace(/^#\/?/,'').toLowerCase();
+ return h==='register'?'register':'login';
+}
+function setAuthMode(m){ authMode=m; location.hash = (m==='register'?'#register':'#login'); }
+window.addEventListener('hashchange', ()=>{ const m=authModeFromHash(); if(m!==authMode){authMode=m; render();} });
+function togglePw(id){
+ const el=document.getElementById(id); if(!el)return; el.type=el.type==='password'?'text':'password';
+ const t=document.getElementById(id+'T'); if(t)t.textContent=el.type==='password'?'Show':'Hide';
+}
+function showErr(msg){
+ const el=$('#app'); if(el) el.innerHTML=`<div class="card" style="max-width:560px;margin:40px auto"><h2 style="color:#b23a3a">Unable to start</h2><p class="mu">${msg}</p><button class="g" onclick="location.reload()">Retry</button></div>`;
+}
+function setRulesBanner(){
+ if(rulesWarn)return; rulesWarn=true;
+ const b=document.createElement('div'); b.id='rulesBanner'; b.style.cssText='position:sticky;top:0;background:#fff3cd;color:#856404;border-bottom:1px solid #ffeaa7;padding:8px 16px;font-size:13px;z-index:10;display:flex;align-items:center;justify-content:space-between';
+ b.innerHTML='<span>⚠ Firestore permissions denied. Open Firebase Console → Firestore Database → Rules and publish read/write rules (or temporary open rules for testing).</span><button class="g" style="padding:2px 10px;font-size:12px" onclick="document.getElementById(\'rulesBanner\')&&document.getElementById(\'rulesBanner\').remove()">Dismiss</button>';
+ document.body.insertBefore(b, document.body.firstChild);
+}
+function clearRulesBanner(){ rulesWarn=false; const b=document.getElementById('rulesBanner'); if(b)b.remove(); }
+function detachDataSubs(){
+ if(dataSubs){ dataSubs.forEach(u=>{try{u()}catch(e){}}); dataSubs=null; }
+ dataSubsUid=null;
+}
+function attachDataSubs(userUid){
+ if(dataSubsUid===userUid)return;
+ detachDataSubs();
+ dataSubsUid=userUid;
+ dataSubs=['staff','punches','notes','evals','settings'].map(n=>db.collection(n).onSnapshot(
+   s=>{data[n]=s.docs.map(d=>({id:d.id,...d.data()}));render()},
+   err=>{
+     if(err && (err.code==='permission-denied'||err.code==='unauthenticated') && !!uid) setRulesBanner();
+     console.warn('snapshot', n, err);
+   }
+ ));
+}
 async function init(){
- db=await claude.use('db'); auth=await claude.use('auth');
- if(!db||!auth) return;
- auth.onAuthStateChanged(user => {
-   uid = user ? user.uid : null;
-   render();
- });
- ['staff','punches','notes','evals','settings'].forEach(n=>db.collection(n).onSnapshot(s=>{data[n]=s.docs.map(d=>({id:d.id,...d.data()}));render()}));
- setInterval(()=>{const c=$('#clk');if(c)c.textContent=new Date().toLocaleTimeString()},1000);
+ authMode = authModeFromHash();
+ const t=setTimeout(()=>{if(!initDone)showErr('Initialization timed out. Check your network connection and Firebase CDN access (gstatic.com).')},10000);
+ try{
+  db=await claude.use('db'); auth=await claude.use('auth');
+  if(!db||!auth){clearTimeout(t);showErr('Firebase services unavailable. Ensure firebase-app-compat, firestore-compat, and auth-compat scripts are loaded from gstatic.com.');return;}
+  initDone=true; clearTimeout(t);
+  auth.onAuthStateChanged(async user => {
+    uid = user ? user.uid : null;
+    if(!uid){ clearRulesBanner(); detachDataSubs(); }
+    else{ attachDataSubs(uid); }
+    await render();
+  });
+  setInterval(()=>{const c=$('#clk');if(c)c.textContent=new Date().toLocaleTimeString()},1000);
+ }catch(err){clearTimeout(t);showErr(err.message||String(err));}
 }
 
-function render(){
+function authShell(formHTML, subHTML){
+ document.body.classList.add('authView');
+ return `<div class="authShell">
+  <div class="brandRow"><div class="logo">⏱</div><div><div style="font-weight:700;font-size:15px">WorkTime ERP</div><div class="mu" style="font-size:12px">Attendance & workforce dashboard</div></div></div>
+  <h2>${authMode==='login'?'Welcome back':'Create your account'}</h2>
+  <p class="sub">${authMode==='login'?'Sign in to continue to your dashboard.':'Use your @iracktech.com email to get started.'}</p>
+  ${formHTML}
+  <div class="amWrap" id="am"></div>
+  ${subHTML}
+  <div class="footNote">${new Date().getFullYear()} WorkTime ERP · iRackTech</div>
+ </div>`;
+}
+
+async function render(){
  if(!db)return;
  const w=wkey();$('#wl').textContent='Week of '+w;
  if(!uid) {
    $('#role').textContent=''; $('#nav').innerHTML='';
    const lOut = $('#logoutBtn'); if(lOut) lOut.style.display='none';
-   $('#app').innerHTML = `
-   <div class="card" style="max-width:400px;margin:40px auto">
-     <div class="tabs" style="margin-bottom:20px">
-       <button class="${authMode==='login'?'on':'g'}" onclick="authMode='login';render()">Sign In</button>
-       <button class="${authMode==='register'?'on':'g'}" onclick="authMode='register';render()">Register</button>
-     </div>
-     ${authMode==='login'?`
-       <h2>Sign In</h2>
-       <label>Email</label><input id="le" type="email" value="kidusadugna@iracktech.com">
-       <label>Password</label><input id="lp" type="password" value="12345">
-       <br><br><div class="row"><button onclick="login()">Sign In</button><span id="am" class="mu" style="margin-left:10px"></span></div>
-     `:`
-       <h2>Register New User</h2>
-       <label>Full Name</label><input id="rn" type="text" placeholder="John Doe">
-       <label>Email (@iracktech.com)</label><input id="re" type="email" placeholder="john@iracktech.com">
-       <label>Password (min 6 chars)</label><input id="rp" type="password">
-       <br><br><div class="row"><button onclick="registerUser()">Register</button><span id="am" class="mu" style="margin-left:10px"></span></div>
-     `}
-   </div>`;
+   const topRow = $('#topRow'); if(topRow) topRow.style.display='none';
+   const host=location&&location.hostname?location.hostname:'office-erp-frontend.vercel.app';
+   const cfgNote=`Firebase Auth setup incomplete. Enable <b>Email/Password</b> in Firebase Console → Authentication → Sign-in method. Also add <b>${host}</b> to Authentication → Settings → Authorized domains if missing.`;
+   const form = authMode==='login'
+    ? `<form onsubmit="event.preventDefault();login()">
+        <div class="authField"><input autocomplete="username" id="le" type="email" placeholder="you@iracktech.com" value="kidusadugna@iracktech.com"><label for="le">Email address</label></div>
+        <div class="authField"><input autocomplete="current-password" id="lp" type="password" placeholder="Enter your password" value="12345"><button type="button" class="pwToggle" id="lpT" onclick="togglePw('lp')">Show</button><label for="lp">Password</label></div>
+        <button type="submit" class="authBtn" id="liBtn">Sign In</button>
+       </form>`
+    : `<form onsubmit="event.preventDefault();registerUser()">
+        <div class="authField"><input autocomplete="name" id="rn" type="text" placeholder="Full name"><label for="rn">Full Name</label></div>
+        <div class="authField"><input autocomplete="email" id="re" type="email" placeholder="you@iracktech.com"><label for="re">Email (@iracktech.com)</label></div>
+        <div class="authField"><input autocomplete="new-password" id="rp" type="password" placeholder="Min. 6 characters"><button type="button" class="pwToggle" id="rpT" onclick="togglePw('rp')">Show</button><label for="rp">Password</label></div>
+        <button type="submit" class="authBtn" id="rgBtn">Create account</button>
+       </form>`;
+   const sub = authMode==='login'
+    ? `<div class="authSubRow"><span>No account?</span><button class="link" onclick="setAuthMode('register')">Create account</button></div>`
+    : `<div class="authSubRow"><span>Already have an account?</span><button class="link" onclick="setAuthMode('login')">Sign in</button></div>`;
+   $('#app').innerHTML = authShell(form, sub);
+   if (location.hash !== '#'+authMode) history.replaceState(null,'','#'+authMode);
+   window.__fbCfgNote = cfgNote;
    return;
  }
+ document.body.classList.remove('authView');
+ const topRow = $('#topRow'); if(topRow) topRow.style.display='';
 
- const me = data.staff.find(x=>x.id===uid);
- if(!me){
-   // The auth is ready but doc isn't created yet or was deleted. Wait for it or just return.
-   $('#app').innerHTML = `<p class="mu">Loading user profile...</p>`;
+ const managerEmail = 'manager@iracktech.com';
+ const userEmail = (auth.currentUser?.email || '').toLowerCase();
+ mgr = userEmail === managerEmail;
+ let my = data.staff.find(x=>x.id===uid);
+ if(!my){
+   if(uid){
+     try {
+       const snap = await db.collection('staff').doc(uid).get();
+       if(snap?.exists){
+         my = {id:snap.id,...snap.data()};
+         if(!data.staff.some(s=>s.id===uid)) data.staff.push(my);
+       } else {
+         await db.collection('staff').doc(uid).set({
+           name: auth.currentUser?.displayName || userEmail.split('@')[0],
+           email: userEmail,
+           dept: mgr ? 'Management' : 'Employee',
+           badge:'', days:5, active:true, mgr:mgr
+         },{merge:true});
+         my = {id:uid,name:auth.currentUser?.displayName||userEmail.split('@')[0],email:userEmail,dept:mgr?'Management':'Employee',active:true,mgr:mgr};
+       }
+     } catch(e){}
+   }
+ }
+ if(!my){
+   $('#app').innerHTML = `<div class="card" style="max-width:480px;margin:40px auto"><p class="mu">Loading user profile…</p></div>`;
    return;
  }
- mgr=me.mgr; myEmail=me.email; myName=me.name;
- $('#role').textContent=mgr?'Manager':'Employee';
+ myEmail=my.email; myName=my.name;
+ if(!mgr && !my.mgr){
+   try{await db.collection('staff').doc(uid).set({mgr:false},{merge:true});}catch(e){}
+ }
+ if(mgr){
+   try{await db.collection('staff').doc(uid).set({mgr:true, dept:'Management'},{merge:true});}catch(e){}
+ }
+ const roleEl=$('#role'); roleEl.textContent=mgr?'Manager':''; roleEl.style.display=roleEl.textContent?'':'none';
  const lOut = $('#logoutBtn'); if(lOut) lOut.style.display='block';
+ if(!mgr) asEmp=false;
 
- if(document.activeElement?.id==='fq'){dash();return}
- if(document.activeElement?.id==='pq'){plist();return}
+ if(document.activeElement?.id==='fq'){ if(mgr)dash(); return;}
+ if(document.activeElement?.id==='pq'){ if(mgr)plist(); return;}
  if(document.activeElement&&/TEXTAREA|INPUT/.test(document.activeElement.tagName))return;
 
- $('#nav').innerHTML=mgr?`<button class="${asEmp?'g':'on'}" onclick="asEmp=false;render()">Manager dashboard</button><button class="${asEmp?'on':'g'}" onclick="asEmp=true;render()">Employee page</button>`:'';
- $('#app').innerHTML=mgr&&!asEmp?manager(w):employee(w);
+ $('#nav').innerHTML=mgr?`
+  <button class="${asEmp?'g':'on'}" onclick="asEmp=false;render()">Manager dashboard</button>
+  <button class="${asEmp?'on':'g'}" onclick="asEmp=true;render()">Employee preview</button>`:'';
+ if(mgr){
+  $('#app').innerHTML=asEmp?employee(w):manager(w);
+ } else {
+  if(typeof sel==='string')sel=null;
+  $('#app').innerHTML=employee(w);
+ }
+}
+
+function setBusy(id, busy){
+ const b=document.getElementById(id); if(!b)return; if(busy){b.disabled=true; b.dataset.old=b.textContent; b.textContent=busy;}
+ else{b.disabled=false; if(b.dataset.old){b.textContent=b.dataset.old; delete b.dataset.old;}}
 }
 
 async function login(){
  const e=$('#le').value.trim().toLowerCase(), p=$('#lp').value;
+ const am=$('#am'); if(am) am.innerHTML='';
+ setBusy('liBtn','Signing in…');
  try {
    await auth.signInWithEmailAndPassword(e, p);
  } catch(err) {
-   $('#am').textContent = err.message;
- }
+   let m = err.message || String(err);
+   if (err && err.code === 'auth/configuration-not-found' && window.__fbCfgNote) m = window.__fbCfgNote;
+   if(am) am.innerHTML = m;
+   else alert(m);
+ } finally { setBusy('liBtn', false); }
 }
 
 async function registerUser(){
  const n=$('#rn').value.trim(), e=$('#re').value.trim().toLowerCase(), p=$('#rp').value;
- if(!n || !p || !okMail(e)){$('#am').textContent='Invalid input or must use @iracktech.com';return;}
- if(data.staff.some(x=>x.email===e)){$('#am').textContent='Email already registered';return;}
+ const am=$('#am');
+ if(!n || !p || !okMail(e)){if(am)am.innerHTML='Enter a full name, valid @iracktech.com email, and a password (min 6 chars).';return;}
+ if(data.staff.some(x=>x.email===e)){if(am)am.innerHTML='This email is already registered. Sign in instead.';return;}
+ setBusy('rgBtn','Creating account…');
  try {
    const res = await auth.createUserWithEmailAndPassword(e, p);
-   await db.collection('staff').doc(res.user.uid).set({name:n, email:e, dept:'Employee', badge:'', days:5, active:true, mgr:data.staff.length===0});
+   await db.collection('staff').doc(res.user.uid).set({
+     name:n, email:e, dept:e==='manager@iracktech.com'?'Management':'Employee',
+     badge:'', days:5, active:true, mgr:e==='manager@iracktech.com'
+   });
  } catch(err) {
-   $('#am').textContent = err.message;
- }
+   let m = err.message || String(err);
+   if (err && err.code === 'auth/configuration-not-found' && window.__fbCfgNote) m = window.__fbCfgNote;
+   if(am) am.innerHTML = m;
+   else alert(m);
+ } finally { setBusy('rgBtn', false); }
 }
 
 function logout(){
- auth.signOut();
+ auth.signOut().then(()=>{ location.hash='#login'; render(); }).catch(()=>{ location.hash='#login'; render(); });
 }
 
 init();

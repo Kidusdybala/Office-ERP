@@ -131,7 +131,7 @@ async function render(){
  if(mgr){
    try{await db.collection('staff').doc(uid).set({mgr:true, dept:'Management'},{merge:true});}catch(e){}
  }
- $('#role').textContent=mgr?'Manager':'Employee';
+ const roleEl=$('#role'); roleEl.textContent=mgr?'Manager':''; roleEl.style.display=roleEl.textContent?'':'none';
  const lOut = $('#logoutBtn'); if(lOut) lOut.style.display='block';
  if(!mgr) asEmp=false;
 
