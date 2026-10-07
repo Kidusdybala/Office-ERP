@@ -1,9 +1,12 @@
-let authMode = 'login';
+let authMode = 'login', auth;
 async function init(){
- db=await claude.use('db');
- if(!db) return;
- uid = localStorage.getItem('erp_uid') || null;
- ['staff','punches','notes','evals','settings'].forEach(n=>db.collection(n).onSnapshot(s=>{data[n]=s.docs.map(d=>({id:d.id,...d.data()}));if(n==='staff'){const m=data.staff.find(x=>x.id==='manager1');if(m&&m.name==='Manager'){db.collection('staff').doc('manager1').update({name:'System Admin'})}};render()}));
+ db=await claude.use('db'); auth=await claude.use('auth');
+ if(!db||!auth) return;
+ auth.onAuthStateChanged(user => {
+   uid = user ? user.uid : null;
+   render();
+ });
+ ['staff','punches','notes','evals','settings'].forEach(n=>db.collection(n).onSnapshot(s=>{data[n]=s.docs.map(d=>({id:d.id,...d.data()}));render()}));
  setInterval(()=>{const c=$('#clk');if(c)c.textContent=new Date().toLocaleTimeString()},1000);
 }
 
@@ -28,7 +31,7 @@ function render(){
        <h2>Register New User</h2>
        <label>Full Name</label><input id="rn" type="text" placeholder="John Doe">
        <label>Email (@iracktech.com)</label><input id="re" type="email" placeholder="john@iracktech.com">
-       <label>Password</label><input id="rp" type="password">
+       <label>Password (min 6 chars)</label><input id="rp" type="password">
        <br><br><div class="row"><button onclick="registerUser()">Register</button><span id="am" class="mu" style="margin-left:10px"></span></div>
      `}
    </div>`;
@@ -37,7 +40,9 @@ function render(){
 
  const me = data.staff.find(x=>x.id===uid);
  if(!me){
-   uid=null; localStorage.removeItem('erp_uid'); render(); return;
+   // The auth is ready but doc isn't created yet or was deleted. Wait for it or just return.
+   $('#app').innerHTML = `<p class="mu">Loading user profile...</p>`;
+   return;
  }
  mgr=me.mgr; myEmail=me.email; myName=me.name;
  $('#role').textContent=mgr?'Manager':'Employee';
@@ -53,22 +58,27 @@ function render(){
 
 async function login(){
  const e=$('#le').value.trim().toLowerCase(), p=$('#lp').value;
- const user=data.staff.find(x=>x.email===e && x.code===p);
- if(!user){$('#am').textContent='Invalid email or password';return;}
- uid=user.id; localStorage.setItem('erp_uid',uid); render();
+ try {
+   await auth.signInWithEmailAndPassword(e, p);
+ } catch(err) {
+   $('#am').textContent = err.message;
+ }
 }
 
 async function registerUser(){
  const n=$('#rn').value.trim(), e=$('#re').value.trim().toLowerCase(), p=$('#rp').value;
  if(!n || !p || !okMail(e)){$('#am').textContent='Invalid input or must use @iracktech.com';return;}
  if(data.staff.some(x=>x.email===e)){$('#am').textContent='Email already registered';return;}
- const newId = 'u_'+Date.now();
- await db.collection('staff').doc(newId).set({name:n, email:e, code:p, dept:'Employee', badge:'', days:5, active:true, mgr:data.staff.length===0});
- uid=newId; localStorage.setItem('erp_uid',uid); render();
+ try {
+   const res = await auth.createUserWithEmailAndPassword(e, p);
+   await db.collection('staff').doc(res.user.uid).set({name:n, email:e, dept:'Employee', badge:'', days:5, active:true, mgr:data.staff.length===0});
+ } catch(err) {
+   $('#am').textContent = err.message;
+ }
 }
 
 function logout(){
- uid=null; localStorage.removeItem('erp_uid'); render();
+ auth.signOut();
 }
 
 init();

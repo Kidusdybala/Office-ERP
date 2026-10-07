@@ -11,8 +11,9 @@ const firebaseConfig = {
 // Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+const auth = firebase.auth();
 
 // Shim to replace mock-claude.js with live Firebase
 window.claude = {
-  use: async (n) => n === 'db' ? db : null
+  use: async (n) => n === 'db' ? db : n === 'auth' ? auth : null
 };
