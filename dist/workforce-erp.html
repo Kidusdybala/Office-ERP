@@ -25,6 +25,9 @@ table{width:100%;border-collapse:collapse}th,td{padding:9px 8px;text-align:left;
 <div class="row" id="nav"></div><div class="row"><button class="g" onclick="wk--;render()">‹</button><b id="wl"></b><button class="g" onclick="wk=Math.min(0,wk+1);render()">›</button></div></header>
 <main id="app"><p class="mu">Loading…</p></main>
 
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script>
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let myEmail='',myName='',claiming=0,editId=null,pq='',rmArm=null,asEmp=false,F={q:'',d:'',f:'',s:'score'},db,uid,mgr=false,wk=0,view='team',sel=null,data={staff:[],punches:[],notes:[],evals:[],settings:[]},ev={q:[3,3,3]};
