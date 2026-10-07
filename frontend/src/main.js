@@ -1,13 +1,20 @@
-let authMode = 'login', auth;
+let authMode = 'login', initDone=false;
+function showErr(msg){
+ const el=$('#app'); if(el) el.innerHTML=`<div class="card" style="max-width:480px;margin:40px auto"><h2 style="color:#b23a3a">Unable to start</h2><p class="mu">${msg}</p><button class="g" onclick="location.reload()">Retry</button></div>`;
+}
 async function init(){
- db=await claude.use('db'); auth=await claude.use('auth');
- if(!db||!auth) return;
- auth.onAuthStateChanged(user => {
-   uid = user ? user.uid : null;
-   render();
- });
- ['staff','punches','notes','evals','settings'].forEach(n=>db.collection(n).onSnapshot(s=>{data[n]=s.docs.map(d=>({id:d.id,...d.data()}));render()}));
- setInterval(()=>{const c=$('#clk');if(c)c.textContent=new Date().toLocaleTimeString()},1000);
+ const t=setTimeout(()=>{if(!initDone)showErr('Initialization timed out. Check your network connection and Firebase CDN access (gstatic.com).')},10000);
+ try{
+  db=await claude.use('db'); auth=await claude.use('auth');
+  if(!db||!auth){clearTimeout(t);showErr('Firebase services unavailable. Ensure firebase-app-compat, firestore-compat, and auth-compat scripts are loaded from gstatic.com.');return;}
+  initDone=true; clearTimeout(t);
+  auth.onAuthStateChanged(user => {
+    uid = user ? user.uid : null;
+    render();
+  });
+  ['staff','punches','notes','evals','settings'].forEach(n=>db.collection(n).onSnapshot(s=>{data[n]=s.docs.map(d=>({id:d.id,...d.data()}));render()}));
+  setInterval(()=>{const c=$('#clk');if(c)c.textContent=new Date().toLocaleTimeString()},1000);
+ }catch(err){clearTimeout(t);showErr(err.message||String(err));}
 }
 
 function render(){
