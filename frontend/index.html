@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>WorkTime ERP</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="stylesheet" href="src/styles.css"></head><body>
+<header><div class="row"><h1>⏱ WorkTime ERP</h1><span class="badge" id="role"></span></div>
+<div class="row" id="nav"></div><div class="row"><button class="g" onclick="wk--;render()">‹</button><b id="wl"></b><button class="g" onclick="wk=Math.min(0,wk+1);render()">›</button><button class="g" onclick="logout()" id="logoutBtn" style="display:none;margin-left:10px">Logout</button></div></header>
+<main id="app"><p class="mu">Loading…</p></main>
+<!-- LOCAL DEV ONLY: fakes window.claude (db + user) using localStorage -->
+<script src="src/mock-claude.js"></script>
+<script src="src/globals.js"></script>
+<script src="src/utils.js"></script>
+<script src="src/api.js"></script>
+<script src="src/components/shared.js"></script>
+<script src="src/components/employee.js"></script>
+<script src="src/components/manager.js"></script>
+<script src="src/components/people.js"></script>
+<script src="src/components/detail.js"></script>
+<script src="src/components/device.js"></script>
+<script src="src/main.js"></script>
+</body></html>
