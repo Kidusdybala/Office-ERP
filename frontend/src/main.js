@@ -1,6 +1,12 @@
-let authMode = 'login', initDone=false;
+let authMode = 'login', initDone=false, rulesWarn=false;
 function showErr(msg){
- const el=$('#app'); if(el) el.innerHTML=`<div class="card" style="max-width:480px;margin:40px auto"><h2 style="color:#b23a3a">Unable to start</h2><p class="mu">${msg}</p><button class="g" onclick="location.reload()">Retry</button></div>`;
+ const el=$('#app'); if(el) el.innerHTML=`<div class="card" style="max-width:560px;margin:40px auto"><h2 style="color:#b23a3a">Unable to start</h2><p class="mu">${msg}</p><button class="g" onclick="location.reload()">Retry</button></div>`;
+}
+function setRulesBanner(){
+ if(rulesWarn)return; rulesWarn=true;
+ const b=document.createElement('div'); b.style.cssText='position:sticky;top:0;background:#fff3cd;color:#856404;border-bottom:1px solid #ffeaa7;padding:8px 16px;font-size:13px;z-index:10';
+ b.innerHTML='⚠ Firestore permissions denied. Open Firebase Console → Firestore Database → Rules and publish read/write rules (or temporary open rules for testing).';
+ document.body.insertBefore(b, document.body.firstChild);
 }
 async function init(){
  const t=setTimeout(()=>{if(!initDone)showErr('Initialization timed out. Check your network connection and Firebase CDN access (gstatic.com).')},10000);
@@ -12,7 +18,13 @@ async function init(){
     uid = user ? user.uid : null;
     render();
   });
-  ['staff','punches','notes','evals','settings'].forEach(n=>db.collection(n).onSnapshot(s=>{data[n]=s.docs.map(d=>({id:d.id,...d.data()}));render()}));
+  ['staff','punches','notes','evals','settings'].forEach(n=>db.collection(n).onSnapshot(
+    s=>{data[n]=s.docs.map(d=>({id:d.id,...d.data()}));render()},
+    err=>{
+      if(err && (err.code==='permission-denied'||err.code==='unauthenticated')) setRulesBanner();
+      console.warn('snapshot', n, err);
+    }
+  ));
   setInterval(()=>{const c=$('#clk');if(c)c.textContent=new Date().toLocaleTimeString()},1000);
  }catch(err){clearTimeout(t);showErr(err.message||String(err));}
 }
@@ -64,23 +76,35 @@ function render(){
 }
 
 async function login(){
- const e=$('#le').value.trim().toLowerCase(), p=$('#lp').value;
+ const e=$('#le').value.trim().toLowerCase(), p=$('#lp').value; const am=$('#am'); if(am) am.textContent='';
  try {
    await auth.signInWithEmailAndPassword(e, p);
  } catch(err) {
-   $('#am').textContent = err.message;
+   let m = err.message || String(err);
+   if (err && err.code === 'auth/configuration-not-found') {
+     m = 'Firebase Auth setup incomplete. Go to Firebase Console → Authentication → Sign-in method and enable Email/Password. Also add "' +
+         (location && location.hostname ? location.hostname : 'office-erp-frontend.vercel.app') +
+         '" to Authentication → Settings → Authorized domains if missing.';
+   }
+   if(am) am.textContent = m;
+   else alert(m);
  }
 }
 
 async function registerUser(){
- const n=$('#rn').value.trim(), e=$('#re').value.trim().toLowerCase(), p=$('#rp').value;
- if(!n || !p || !okMail(e)){$('#am').textContent='Invalid input or must use @iracktech.com';return;}
- if(data.staff.some(x=>x.email===e)){$('#am').textContent='Email already registered';return;}
+ const n=$('#rn').value.trim(), e=$('#re').value.trim().toLowerCase(), p=$('#rp').value; const am=$('#am');
+ if(!n || !p || !okMail(e)){if(am)am.textContent='Invalid input or must use @iracktech.com';return;}
+ if(data.staff.some(x=>x.email===e)){if(am)am.textContent='Email already registered';return;}
  try {
    const res = await auth.createUserWithEmailAndPassword(e, p);
    await db.collection('staff').doc(res.user.uid).set({name:n, email:e, dept:'Employee', badge:'', days:5, active:true, mgr:data.staff.length===0});
  } catch(err) {
-   $('#am').textContent = err.message;
+   let m = err.message || String(err);
+   if (err && err.code === 'auth/configuration-not-found') {
+     m = 'Firebase Auth setup incomplete. Enable Email/Password in Firebase Console → Authentication → Sign-in method.';
+   }
+   if(am) am.textContent = m;
+   else alert(m);
  }
 }
 
