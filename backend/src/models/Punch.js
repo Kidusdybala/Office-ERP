@@ -21,4 +21,13 @@ async function getByStaffAndDay(staffId, dateStr) {
   return res.rows;
 }
 
-module.exports = { create, getByStaffAndDay };
+async function syncDeviceDay(staffId, dateStr, firstTs, lastTs) {
+  await query(
+    `DELETE FROM punches WHERE staff_id = $1 AND DATE(timestamp) = $2 AND source = 'device'`,
+    [staffId, dateStr]
+  );
+  await create(staffId, firstTs, 'in', 'device');
+  if (lastTs > firstTs) await create(staffId, lastTs, 'out', 'device');
+}
+
+module.exports = { create, getByStaffAndDay, syncDeviceDay };

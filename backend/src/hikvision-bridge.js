@@ -74,6 +74,7 @@ const db = admin.firestore();
 let query = null;
 let createPunch = null;
 let getByStaffAndDay = null;
+let syncDeviceDay = null;
 const pgActive = !!(process.env.DB_HOST && process.env.DB_PASS);
 if (pgActive) {
   try {
@@ -82,6 +83,7 @@ if (pgActive) {
     const P = require('./models/Punch');
     createPunch = P.create;
     getByStaffAndDay = P.getByStaffAndDay;
+    syncDeviceDay = P.syncDeviceDay;
   } catch (e) {
     console.warn('[warn] ERP DB helpers failed to load, Firestore-only mode:', e.message);
   }
@@ -283,12 +285,18 @@ async function writePunch(staffDoc, ts) {
   const uid  = staffDoc.id;
   const day  = dk(new Date(ts));
 
-  // Some face-auth passes emit multiple access events seconds apart. Treat a
-  // repeat inside two minutes as one passage so it cannot create an instant OUT.
+  // Keep only one IN and one OUT per day: first accepted event is IN, and each
+  // later accepted event moves the single OUT punch to the latest time.
   let dayPunches = [];
   try {
     const snap = await db.collection('punches').where('uid', '==', uid).get();
-    dayPunches = snap.docs.map(d => d.data()).filter(p => dk(new Date(p.ts)) === day);
+    dayPunches = snap.docs
+      .map(d => ({ id: d.id, ref: d.ref, ...d.data() }))
+      .filter(p => p.src === 'device' && dk(new Date(p.ts)) === day)
+      .sort((a, b) => Number(a.ts) - Number(b.ts));
+
+    // Some face-auth passes emit multiple events seconds apart. Treat repeats
+    // inside two minutes as one passage so they cannot become an instant OUT.
     if (dayPunches.some(p => Math.abs(Number(p.ts) - ts) < 120_000)) {
       console.log('[skip] repeated access event inside the duplicate window');
       return false;
@@ -297,46 +305,37 @@ async function writePunch(staffDoc, ts) {
     console.warn('[warn] Punch deduplication lookup failed:', err.message);
   }
 
-  // Determine in/out by counting existing punches that day
-  let dayCount = 0;
-  if (pgActive && getByStaffAndDay && staffDoc.erpId) {
-    try {
-      const erpPunches = await getByStaffAndDay(staffDoc.erpId, day);
-      dayCount = erpPunches.length;
-    } catch (err) {
-      console.warn('[warn] ERP punch count failed, using Firestore:', err.message);
-    }
-  }
-  // Fallback: Firestore count
-  if (!dayCount) {
-    try {
-      const snap = await db.collection('punches')
-        .where('uid', '==', uid)
-        .get();
-      dayCount = snap.docs.filter(d => dk(new Date(d.data().ts)) === day).length;
-    } catch {}
-  }
-  const type = dayCount % 2 === 0 ? 'in' : 'out';
+  const firstTs = dayPunches.length ? Math.min(Number(dayPunches[0].ts), ts) : ts;
+  const lastTs = dayPunches.length ? Math.max(Number(dayPunches[dayPunches.length - 1].ts), ts) : ts;
+  const firstDoc = dayPunches[0];
+  const inRef = firstDoc?.ref || db.collection('punches').doc(`${uid}_device_in_${day}`);
+  const outRef = db.collection('punches').doc(`${uid}_device_out_${day}`);
+  const batch = db.batch();
+  batch.set(inRef, { uid, ts: firstTs, type: 'in', src: 'device' });
+  if (lastTs > firstTs) batch.set(outRef, { uid, ts: lastTs, type: 'out', src: 'device' });
 
-  // Write to Firestore for frontend compatibility
+  // Collapse any older device alternation records for this employee/day.
+  for (const punch of dayPunches) {
+    if (punch.id !== inRef.id && punch.id !== outRef.id) batch.delete(punch.ref);
+  }
+
   try {
-    const docId = `${uid}_${ts}`;
-    await db.collection('punches').doc(docId).set({
-      uid, ts, type, src: 'device'
-    });
+    await batch.commit();
   } catch (err) {
     console.warn('[warn] Firestore write failed:', err.message);
+    return false;
   }
 
   // Write to ERP database (optional)
-  if (pgActive && createPunch && staffDoc.erpId) {
+  if (pgActive && syncDeviceDay && staffDoc.erpId) {
     try {
-      await createPunch(staffDoc.erpId, ts, type, 'device');
+      await syncDeviceDay(staffDoc.erpId, day, firstTs, lastTs);
     } catch (err) {
       console.error('[error] ERP punch write failed:', err.message);
     }
   }
 
+  const type = lastTs > firstTs ? 'out updated' : 'in';
   console.log(`[punch] ${staffDoc.name || uid}  ${type}  ${new Date(ts).toISOString()}`);
   return true;
 }
