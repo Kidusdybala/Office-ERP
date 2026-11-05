@@ -1,8 +1,8 @@
 /**
- * Hikvision DS-K3B411SX ↔ Firestore + ERP Bridge
+ * Hikvision DS-K6B411TX series ↔ Firestore + ERP Bridge
  *
  * Runs locally on the same LAN as the turnstile.
- * Polls /ISAPI/AccessControl/AcsEvent every  every 30 s,
+ * Polls /ISAPI/AccessControl/AcsEvent every 30 s,
  * matches employeeNo/cardNo → ERP staff badge_number (with Firestore fallback),
  * and writes punches with src:"device" to both Firestore and the ERP database.
  *
@@ -188,7 +188,14 @@ async function checkDevice() {
 async function fetchEvents(since) {
   // ISAPI: search access control events
   // Doc: /ISAPI/AccessControl/AcsEvent?format=json
-  const fmt  = d => d.toISOString().slice(0, 19);          // "2026-10-07T08:00:00"
+  // The controller expects the device's local wall time with an explicit offset.
+  const fmt = d => {
+    const offset = -d.getTimezoneOffset();
+    const local = new Date(d.getTime() + offset * 60_000).toISOString().slice(0, 19);
+    const sign = offset >= 0 ? '+' : '-';
+    const abs = Math.abs(offset);
+    return `${local}${sign}${pad(Math.floor(abs / 60))}:${pad(abs % 60)}`;
+  };
   const now  = new Date();
   const body = {
     AcsEventCond: {
@@ -276,6 +283,20 @@ async function writePunch(staffDoc, ts) {
   const uid  = staffDoc.id;
   const day  = dk(new Date(ts));
 
+  // Some face-auth passes emit multiple access events seconds apart. Treat a
+  // repeat inside two minutes as one passage so it cannot create an instant OUT.
+  let dayPunches = [];
+  try {
+    const snap = await db.collection('punches').where('uid', '==', uid).get();
+    dayPunches = snap.docs.map(d => d.data()).filter(p => dk(new Date(p.ts)) === day);
+    if (dayPunches.some(p => Math.abs(Number(p.ts) - ts) < 120_000)) {
+      console.log('[skip] repeated access event inside the duplicate window');
+      return false;
+    }
+  } catch (err) {
+    console.warn('[warn] Punch deduplication lookup failed:', err.message);
+  }
+
   // Determine in/out by counting existing punches that day
   let dayCount = 0;
   if (pgActive && getByStaffAndDay && staffDoc.erpId) {
@@ -317,6 +338,7 @@ async function writePunch(staffDoc, ts) {
   }
 
   console.log(`[punch] ${staffDoc.name || uid}  ${type}  ${new Date(ts).toISOString()}`);
+  return true;
 }
 
 // ── Main poll loop ────────────────────────────────────────────────────────
@@ -334,11 +356,9 @@ async function poll() {
     );
 
     for (const ev of sorted) {
-      // Skip non-access events (e.g. "Climbing Over Barrier" alarm = major 5)
-      // Accept only major 1 (device), 3 (alarm door), or events with a valid employeeNo
-      const major = ev.major ?? -1;
+      // Only normal successful access events; ignore alarms and denied attempts.
       const empNo = String(ev.employeeNoString || ev.employeeNo || '').trim();
-      if (!empNo && major !== 1 && major !== 3) continue;
+      if (Number(ev.major) !== 5 || Number(ev.minor) !== 75 || !empNo) continue;
 
       const evTime = new Date(ev.time || ev.dateTime);
       if (isNaN(evTime)) continue;
@@ -354,8 +374,7 @@ async function poll() {
         continue;
       }
 
-      await writePunch(matched, ts);
-      count++;
+      if (await writePunch(matched, ts)) count++;
     }
 
     if (count > 0) console.log(`[poll] wrote ${count} new punch(es)`);

@@ -1,23 +1,27 @@
 # WorkTime ERP – attendance, plans/reports & performance
 
 ## Layout
-- `src/app.js` – all app logic (punch, plans, reports, stats, manager dashboard, employees, Hikvision import)
-- `src/styles.css`, `src/body.html` – styling and page shell
-- `src/mock-claude.js` – local fake of the Claude Artifact runtime (`claude.use("db")`, `claude.use("user")`) using localStorage
-- `index.html` – dev entry (uses the mock)
-- `build.py` – bundles everything into `dist/workforce-erp.html` (no mock)
+- `frontend/src/` – WorkTime ERP interface, Firebase integration, dashboards, employee tools, and Hikvision event import.
+- `frontend/index.html` – browser entry point for the Vercel deployment.
+- `backend/src/hikvision-bridge.js` – local bridge that polls Hikvision ISAPI and writes attendance punches to Firestore.
+- `backend/.env` and `backend/serviceAccount.json` – local-only device and Firebase credentials; these are excluded from Git.
 
 ## Run locally
-    python3 -m http.server 8000
-- Manager: http://localhost:8000/index.html?as=manager
-- Employee: http://localhost:8000/index.html?as=emp&email=sara@company.com&name=Sara
-(Add the employee in the manager's Employees tab first, then open the employee URL and link with the 6-digit code.)
-All data is shared between tabs through localStorage of the same browser.
+Open `frontend/index.html` through a local web server, or use the Vercel deployment. The interface uses the Office ERP Firebase project for sign-in and data.
 
-## Publish
+Run the Hikvision bridge on a computer on the same LAN as the turnstile:
+
+    cd backend
+    npm install
+    npm run bridge
+
+Set `HIK_HOST`, `HIK_USER`, `HIK_PASS`, and `GOOGLE_APPLICATION_CREDENTIALS` in the ignored local `backend/.env`. Add the Hikvision employee number to the employee's ERP `badge` field. The bridge matches that field and records access events as punches.
+
+## Build a standalone artifact
+    cd frontend
     python3 build.py
-Publish `dist/workforce-erp.html` as a Claude Artifact with capabilities
-`db` (rules: `evals` and `settings` read=view, write=admin) and `user` (scopes: profile).
+
+The generated file is `frontend/dist/workforce-erp.html`. The Vercel deployment serves `frontend/index.html` directly.
 
 ## Data model (collections)
 - `staff/{uid | inv:email}` name, email, dept, badge, days, active, code, mgr
@@ -30,7 +34,3 @@ Publish `dist/workforce-erp.html` as a Claude Artifact with capabilities
 attendance 40 + punctuality 20 + reports 20 + manager rating 20 (without rating: the other three scaled to 100).
 Attendance = days with both IN and OUT / scheduled days elapsed.
 
-## Moving to a real backend (next step)
-`db`/`user` calls are the only platform-specific parts. Replace them with your API (e.g. Node/Express or Django + PostgreSQL,
-real email+password auth with hashed passwords, per-role permissions) and add a Hikvision bridge that
-receives ISAPI access events from the DS-K3B411SX (`/ISAPI/AccessControl/AcsEvent`) and writes `punches` with `src:"device"`.
