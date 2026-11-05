@@ -76,8 +76,8 @@ async function render(){
    const cfgNote=`Firebase Auth setup incomplete. Enable <b>Email/Password</b> in Firebase Console → Authentication → Sign-in method. Also add <b>${host}</b> to Authentication → Settings → Authorized domains if missing.`;
    const form = authMode==='login'
     ? `<form onsubmit="event.preventDefault();login()">
-        <div class="authField"><input autocomplete="username" id="le" type="email" placeholder="you@iracktech.com" value="kidusadugna@iracktech.com"><label for="le">Email address</label></div>
-        <div class="authField"><input autocomplete="current-password" id="lp" type="password" placeholder="Enter your password" value="12345"><button type="button" class="pwToggle" id="lpT" onclick="togglePw('lp')">Show</button><label for="lp">Password</label></div>
+        <div class="authField"><input autocomplete="username" id="le" type="email" placeholder="you@iracktech.com"><label for="le">Email address</label></div>
+        <div class="authField"><input autocomplete="current-password" id="lp" type="password" placeholder="Enter your password"><button type="button" class="pwToggle" id="lpT" onclick="togglePw('lp')">Show</button><label for="lp">Password</label></div>
         <button type="submit" class="authBtn" id="liBtn">Sign In</button>
        </form>`
     : `<form onsubmit="event.preventDefault();registerUser()">

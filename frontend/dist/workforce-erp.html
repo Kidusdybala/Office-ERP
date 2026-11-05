@@ -1,7 +1,4 @@
-<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8"><title>WorkTime ERP</title>
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<style>:root{--bg:#f5f6fa;--card:#fff;--tx:#1b1f2a;--mu:#6b7285;--bd:#e3e6ee;--ac:#3b5bdb;--ok:#2f9e5b;--wa:#e8890c;--er:#d6336c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><title>WorkTime ERP</title><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>:root{--bg:#f5f6fa;--card:#fff;--tx:#1b1f2a;--mu:#6b7285;--bd:#e3e6ee;--ac:#3b5bdb;--ok:#2f9e5b;--wa:#e8890c;--er:#d6336c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12141b;--card:#1b1f2a;--tx:#eceef5;--mu:#98a0b5;--bd:#2c3242;--ac:#748ffc}}
 :root[data-theme="dark"]{--bg:#12141b;--card:#1b1f2a;--tx:#eceef5;--mu:#98a0b5;--bd:#2c3242;--ac:#748ffc}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -42,16 +39,10 @@ body.authView main{max-width:420px;width:100%;margin:0;padding:0}
 .authSubRow a,.authSubRow button.link{background:transparent;border:0;padding:0;color:var(--ac);font-weight:600;cursor:pointer;text-decoration:underline}
 .authShell .amWrap{min-height:18px;margin-top:10px;color:var(--er);font-size:13px}
 .authShell .footNote{text-align:center;color:var(--mu);font-size:12px;margin-top:16px}
-</style></head><body>
-<header><div class="row"><h1>⏱ WorkTime ERP</h1><span class="badge" id="role"></span></div>
+</style></head><body><header><div class="row"><h1>⏱ WorkTime ERP</h1><span class="badge" id="role"></span></div>
 <div class="row" id="nav"></div><div class="row"><button class="g" onclick="wk--;render()">‹</button><b id="wl"></b><button class="g" onclick="wk=Math.min(0,wk+1);render()">›</button></div></header>
 <main id="app"><p class="mu">Loading…</p></main>
-
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-<script>
-const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script><script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script><script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script><script>const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let myEmail='',myName='',claiming=0,editId=null,pq='',rmArm=null,asEmp=false,F={q:'',d:'',f:'',s:'score'},db,auth,uid,mgr=false,wk=0,dOffset=0,view='team',sel=null,data={staff:[],punches:[],notes:[],evals:[],settings:[]},ev={q:[3,3,3]};
 
 const firebaseConfig = {
@@ -226,7 +217,7 @@ function detail(id,w){const s=data.staff.find(x=>x.id===id),st=stats(s,w),h=hour
  <div class="card wrap" style="margin-top:14px"><h2>Time log — shift ${shift().start} to ${shift().end}</h2>${timeTable(st,w)}</div>`}
 async function saveEval(id,w){const q=ev.q,c=$('#ec').value;await db.collection('evals').doc(id+'_'+w).set({uid:id,week:w,q,comment:c,rating:q.reduce((a,b)=>a+b,0)/3});ev.id=null}
 
-function device(){return`<div class="grid"><div class="card"><h2>Hikvision DS-K3B411SX</h2><p class="mu">A web page cannot talk to the barrier directly (it sits on your LAN). Run a small bridge service that listens to the device’s access events (ISAPI HTTP listening / <code>/ISAPI/AccessControl/AcsEvent</code>) and forwards each valid pass as JSON. Paste or import those events here. Each employee’s <b>badge / employee No.</b> must match the one enrolled on the device.</p><p class="mu">Format:<br><code>[{"employeeNo":"1001","time":"2026-10-07T08:02:11+03:00"}]</code></p></div>
+function device(){return`<div class="grid"><div class="card"><h2>Hikvision DS-K6B411TX-M</h2><p class="mu">The local Hikvision bridge polls the turnstile’s ISAPI access events and syncs authorized passes to this ERP. Keep the bridge running on a computer on the same network as the device. Enroll each employee’s face on the turnstile and set their <b>badge / employee No.</b> here to the same number. The bridge records punch events; face images stay on the device.</p><p class="mu">Manual event import format:<br><code>[{"employeeNo":"1001","time":"2026-10-07T08:02:11+03:00"}]</code></p></div>
  <div class="card"><h2>Import device events</h2><textarea id="imp" placeholder='[{"employeeNo":"1001","time":"..."}]'></textarea><div class="row" style="margin-top:8px"><button onclick="imp()">Import</button><span id="impr" class="mu"></span></div><p class="mu">In/Out alternate per day for each person. Re-importing the same events is safe.</p></div></div>`}
 async function imp(){try{const a=JSON.parse($('#imp').value).map(e=>({s:data.staff.find(x=>x.badge&&x.badge===String(e.employeeNo)),t:new Date(e.time).getTime()})).sort((a,b)=>a.t-b.t);let n=0,m=0;
  const seen={};for(const e of a){if(!e.s||isNaN(e.t)){m++;continue}const k=e.s.id+dk(new Date(e.t));const c=seen[k]??=data.punches.filter(p=>p.uid===e.s.id&&dk(new Date(p.ts))===dk(new Date(e.t))).length;
@@ -311,8 +302,8 @@ async function render(){
    const cfgNote=`Firebase Auth setup incomplete. Enable <b>Email/Password</b> in Firebase Console → Authentication → Sign-in method. Also add <b>${host}</b> to Authentication → Settings → Authorized domains if missing.`;
    const form = authMode==='login'
     ? `<form onsubmit="event.preventDefault();login()">
-        <div class="authField"><input autocomplete="username" id="le" type="email" placeholder="you@iracktech.com" value="kidusadugna@iracktech.com"><label for="le">Email address</label></div>
-        <div class="authField"><input autocomplete="current-password" id="lp" type="password" placeholder="Enter your password" value="12345"><button type="button" class="pwToggle" id="lpT" onclick="togglePw('lp')">Show</button><label for="lp">Password</label></div>
+        <div class="authField"><input autocomplete="username" id="le" type="email" placeholder="you@iracktech.com"><label for="le">Email address</label></div>
+        <div class="authField"><input autocomplete="current-password" id="lp" type="password" placeholder="Enter your password"><button type="button" class="pwToggle" id="lpT" onclick="togglePw('lp')">Show</button><label for="lp">Password</label></div>
         <button type="submit" class="authBtn" id="liBtn">Sign In</button>
        </form>`
     : `<form onsubmit="event.preventDefault();registerUser()">
@@ -429,6 +420,5 @@ function logout(){
 }
 
 init();
-
 
 </script></body></html>
