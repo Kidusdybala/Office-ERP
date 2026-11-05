@@ -19,9 +19,10 @@ Set `HIK_HOST`, `HIK_USER`, `HIK_PASS`, and `GOOGLE_APPLICATION_CREDENTIALS` in 
 
 ## Build a standalone artifact
     cd frontend
-    python3 build.py
+    node build.js
+    # or: python3 build.py
 
-The generated file is `frontend/dist/workforce-erp.html`. The Vercel deployment serves `frontend/index.html` directly.
+The generated file is `frontend/dist/workforce-erp.html` (and copied to `dist/workforce-erp.html`). The Vercel deployment serves `frontend/index.html` directly.
 
 ## Data model (collections)
 - `staff/{uid | inv:email}` name, email, dept, badge, days, active, code, mgr

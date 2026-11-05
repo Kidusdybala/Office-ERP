@@ -55,13 +55,13 @@ async function init(){
 function authShell(formHTML, subHTML){
  document.body.classList.add('authView');
  return `<div class="authShell">
-  <div class="brandRow"><div class="logo">⏱</div><div><div style="font-weight:700;font-size:15px">WorkTime ERP</div><div class="mu" style="font-size:12px">Attendance & workforce dashboard</div></div></div>
+  <div class="brandRow"><img class="brandLogo" src="src/logo-circle.png" alt="IRack IT Solution logo"><div><div style="font-weight:700;font-size:15px">IRack IT Solution</div><div class="mu" style="font-size:12px">WorkTime ERP · Attendance & workforce dashboard</div></div></div>
   <h2>${authMode==='login'?'Welcome back':'Create your account'}</h2>
   <p class="sub">${authMode==='login'?'Sign in to continue to your dashboard.':'Use your @iracktech.com email to get started.'}</p>
   ${formHTML}
   <div class="amWrap" id="am"></div>
   ${subHTML}
-  <div class="footNote">${new Date().getFullYear()} WorkTime ERP · iRackTech</div>
+  <div class="footNote">${new Date().getFullYear()} IRack IT Solution</div>
  </div>`;
 }
 
