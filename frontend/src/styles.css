@@ -37,7 +37,8 @@ body.authView main{max-width:420px;width:100%;margin:0;padding:0}
 .authBtn{width:100%;height:48px;border-radius:12px;background:var(--ac);color:#fff;font-weight:600;font-size:15px;margin-top:6px;border:0}
 .authBtn:disabled{opacity:.6;cursor:not-allowed}
 .authSubRow{display:flex;align-items:center;justify-content:space-between;margin-top:14px;color:var(--mu);font-size:14px}
-.authSubRow a,.authSubRow button.link{background:transparent;border:0;padding:0;color:var(--ac);font-weight:600;cursor:pointer;text-decoration:underline}
+.authSubRow a,.authSubRow button.link,.authForgot button.link{background:transparent;border:0;padding:0;color:var(--ac);font-weight:600;cursor:pointer;text-decoration:underline}
+.authForgot{display:flex;justify-content:flex-end;margin:-6px 2px 12px;font-size:13px}
 .authShell .amWrap{min-height:0;margin-top:10px;color:var(--er);font-size:13px;line-height:1.45}
 .authShell .amWrap:not(:empty){padding:10px 12px;border:1px solid color-mix(in srgb,var(--er) 28%,transparent);border-radius:10px;background:color-mix(in srgb,var(--er) 8%,var(--card))}
 .authShell .footNote{text-align:center;color:var(--mu);font-size:12px;margin-top:16px}

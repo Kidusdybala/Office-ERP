@@ -81,6 +81,7 @@ async function render(){
     ? `<form onsubmit="event.preventDefault();login()" autocomplete="on">
         <div class="authField"><label for="le">Work email</label><input autocomplete="username" name="username" id="le" type="email" placeholder="name@iracktech.com" required></div>
         <div class="authField"><label for="lp">Password</label><input autocomplete="current-password" name="password" id="lp" type="password" placeholder="Enter your password" required><button type="button" class="pwToggle" id="lpT" onclick="togglePw('lp')">Show</button></div>
+        <div class="authForgot"><button type="button" class="link" id="frBtn" onclick="resetPassword()">Forgot password?</button></div>
         <button type="submit" class="authBtn" id="liBtn">Sign In</button>
        </form>`
     : `<form onsubmit="event.preventDefault();registerUser()" autocomplete="on">
@@ -159,6 +160,13 @@ function setBusy(id, busy){
 
 function authErrorMessage(err, action){
  const code=err?.code||'';
+ if(action==='reset'){
+  if(code==='auth/invalid-email'||code==='auth/missing-email')return 'Enter a valid work email address, then try again.';
+  if(code==='auth/too-many-requests')return 'There have been too many requests. Wait a few minutes, then try again.';
+  if(code==='auth/network-request-failed')return 'We couldn’t reach the sign-in service. Check your internet connection and try again.';
+  if(code==='auth/operation-not-allowed'||code==='auth/configuration-not-found')return 'Password reset isn’t available right now. Please contact your administrator.';
+  return 'If an account exists for that email, we sent a password reset link. Check your inbox and spam folder.';
+ }
  const messages={
   'auth/invalid-login-credentials':"We couldn't sign you in with those details. Check your email and password, then try again. If you haven't created an account, choose Create account.",
   'auth/invalid-credential':"We couldn't sign you in with those details. Check your email and password, then try again. If you haven't created an account, choose Create account.",
@@ -195,6 +203,19 @@ async function login(){
  } catch(err) {
    showAuthMessage(authErrorMessage(err,'login'));
  } finally { setBusy('liBtn', false); }
+}
+
+async function resetPassword(){
+ const e=$('#le').value.trim().toLowerCase();
+ showAuthMessage('');
+ if(!okMail(e)){showAuthMessage('Enter your work email ending in @iracktech.com above, then choose Forgot password again.');$('#le').focus();return;}
+ setBusy('frBtn','Sending…');
+ try{
+  await auth.sendPasswordResetEmail(e);
+  showAuthMessage('If an account exists for that email, we sent a password reset link. Check your inbox and spam folder.');
+ }catch(err){
+  showAuthMessage(authErrorMessage(err,'reset'));
+ }finally{setBusy('frBtn',false);}
 }
 
 async function registerUser(){
