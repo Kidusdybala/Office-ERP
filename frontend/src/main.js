@@ -3,7 +3,12 @@ function authModeFromHash(){
  const h=(location.hash||'').replace(/^#\/?/,'').toLowerCase();
  return h==='register'?'register':'login';
 }
-function setAuthMode(m){ authMode=m; location.hash = (m==='register'?'#register':'#login'); }
+function setAuthMode(m){
+ authMode=m==='register'?'register':'login';
+ const hash='#'+authMode;
+ if(location.hash!==hash)history.replaceState(null,'',hash);
+ render();
+}
 window.addEventListener('hashchange', ()=>{ const m=authModeFromHash(); if(m!==authMode){authMode=m; render();} });
 function togglePw(id){
  const el=document.getElementById(id); if(!el)return; el.type=el.type==='password'?'text':'password';
