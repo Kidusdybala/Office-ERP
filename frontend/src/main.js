@@ -59,7 +59,7 @@ function authShell(formHTML, subHTML){
   <h2>${authMode==='login'?'Welcome back':'Create your account'}</h2>
   <p class="sub">${authMode==='login'?'Sign in to continue to your dashboard.':'Use your @iracktech.com email to get started.'}</p>
   ${formHTML}
-  <div class="amWrap" id="am"></div>
+  <div class="amWrap" id="am" role="alert" aria-live="polite"></div>
   ${subHTML}
   <div class="footNote">${new Date().getFullYear()} IRack IT Solution</div>
  </div>`;
@@ -72,18 +72,16 @@ async function render(){
    $('#role').textContent=''; $('#nav').innerHTML='';
    const lOut = $('#logoutBtn'); if(lOut) lOut.style.display='none';
    const topRow = $('#topRow'); if(topRow) topRow.style.display='none';
-   const host=location&&location.hostname?location.hostname:'office-erp-frontend.vercel.app';
-   const cfgNote=`Firebase Auth setup incomplete. Enable <b>Email/Password</b> in Firebase Console → Authentication → Sign-in method. Also add <b>${host}</b> to Authentication → Settings → Authorized domains if missing.`;
    const form = authMode==='login'
-    ? `<form onsubmit="event.preventDefault();login()">
-        <div class="authField"><input autocomplete="username" id="le" type="email" placeholder="you@iracktech.com"><label for="le">Email address</label></div>
-        <div class="authField"><input autocomplete="current-password" id="lp" type="password" placeholder="Enter your password"><button type="button" class="pwToggle" id="lpT" onclick="togglePw('lp')">Show</button><label for="lp">Password</label></div>
+    ? `<form onsubmit="event.preventDefault();login()" autocomplete="on">
+        <div class="authField"><label for="le">Work email</label><input autocomplete="username" name="username" id="le" type="email" placeholder="name@iracktech.com" required></div>
+        <div class="authField"><label for="lp">Password</label><input autocomplete="current-password" name="password" id="lp" type="password" placeholder="Enter your password" required><button type="button" class="pwToggle" id="lpT" onclick="togglePw('lp')">Show</button></div>
         <button type="submit" class="authBtn" id="liBtn">Sign In</button>
        </form>`
-    : `<form onsubmit="event.preventDefault();registerUser()">
-        <div class="authField"><input autocomplete="name" id="rn" type="text" placeholder="Full name"><label for="rn">Full Name</label></div>
-        <div class="authField"><input autocomplete="email" id="re" type="email" placeholder="you@iracktech.com"><label for="re">Email (@iracktech.com)</label></div>
-        <div class="authField"><input autocomplete="new-password" id="rp" type="password" placeholder="Min. 6 characters"><button type="button" class="pwToggle" id="rpT" onclick="togglePw('rp')">Show</button><label for="rp">Password</label></div>
+    : `<form onsubmit="event.preventDefault();registerUser()" autocomplete="on">
+        <div class="authField"><label for="rn">Full name</label><input autocomplete="name" name="name" id="rn" type="text" placeholder="e.g. Kidus Adugna" autocapitalize="words" required></div>
+        <div class="authField"><label for="re">Work email (@iracktech.com)</label><input autocomplete="email" name="email" id="re" type="email" placeholder="name@iracktech.com" required></div>
+        <div class="authField"><label for="rp">Create a password</label><input autocomplete="new-password" name="new-password" id="rp" type="password" placeholder="At least 6 characters" minlength="6" required><button type="button" class="pwToggle" id="rpT" onclick="togglePw('rp')">Show</button></div>
         <button type="submit" class="authBtn" id="rgBtn">Create account</button>
        </form>`;
    const sub = authMode==='login'
@@ -91,7 +89,6 @@ async function render(){
     : `<div class="authSubRow"><span>Already have an account?</span><button class="link" onclick="setAuthMode('login')">Sign in</button></div>`;
    $('#app').innerHTML = authShell(form, sub);
    if (location.hash !== '#'+authMode) history.replaceState(null,'','#'+authMode);
-   window.__fbCfgNote = cfgNote;
    return;
  }
  document.body.classList.remove('authView');
@@ -155,25 +152,53 @@ function setBusy(id, busy){
  else{b.disabled=false; if(b.dataset.old){b.textContent=b.dataset.old; delete b.dataset.old;}}
 }
 
+function authErrorMessage(err, action){
+ const code=err?.code||'';
+ const messages={
+  'auth/invalid-login-credentials':"We couldn't sign you in with those details. Check your email and password, then try again. If you haven't created an account, choose Create account.",
+  'auth/invalid-credential':"We couldn't sign you in with those details. Check your email and password, then try again. If you haven't created an account, choose Create account.",
+  'auth/user-not-found':"We couldn't find an account with those details. Check your email, or choose Create account to get started.",
+  'auth/wrong-password':"That password doesn't match this account. Check it and try again.",
+  'auth/invalid-email':'Enter a valid email address and try again.',
+  'auth/missing-email':'Enter your email address to continue.',
+  'auth/missing-password':'Enter your password to continue.',
+  'auth/weak-password':'Choose a stronger password with at least 6 characters.',
+  'auth/email-already-in-use':'An account with this email already exists. Try signing in instead.',
+  'auth/too-many-requests':'There have been too many attempts. Wait a few minutes, then try again.',
+  'auth/network-request-failed':'We couldn’t reach the sign-in service. Check your internet connection and try again.',
+  'auth/user-disabled':'This account is currently disabled. Please contact your administrator.',
+  'auth/operation-not-allowed':'Email and password sign-in isn’t enabled yet. Please contact your administrator.',
+  'auth/configuration-not-found':'Sign-in isn’t available right now. Please contact your administrator.'
+ };
+ return messages[code] || (action==='register'
+  ? 'We couldn’t create your account just now. Please try again. If the problem continues, contact your administrator.'
+  : 'We couldn’t sign you in just now. Please try again. If the problem continues, contact your administrator.');
+}
+
+function showAuthMessage(message){
+ const el=$('#am');
+ if(el)el.textContent=message||'';
+}
+
 async function login(){
  const e=$('#le').value.trim().toLowerCase(), p=$('#lp').value;
- const am=$('#am'); if(am) am.innerHTML='';
+ showAuthMessage('');
+ if(!e||!p){showAuthMessage(!e?'Enter your email address to continue.':'Enter your password to continue.');return;}
  setBusy('liBtn','Signing in…');
  try {
    await auth.signInWithEmailAndPassword(e, p);
  } catch(err) {
-   let m = err.message || String(err);
-   if (err && err.code === 'auth/configuration-not-found' && window.__fbCfgNote) m = window.__fbCfgNote;
-   if(am) am.innerHTML = m;
-   else alert(m);
+   showAuthMessage(authErrorMessage(err,'login'));
  } finally { setBusy('liBtn', false); }
 }
 
 async function registerUser(){
- const n=$('#rn').value.trim(), e=$('#re').value.trim().toLowerCase(), p=$('#rp').value;
- const am=$('#am');
- if(!n || !p || !okMail(e)){if(am)am.innerHTML='Enter a full name, valid @iracktech.com email, and a password (min 6 chars).';return;}
- if(data.staff.some(x=>x.email===e)){if(am)am.innerHTML='This email is already registered. Sign in instead.';return;}
+ const n=$('#rn').value.trim().replace(/\s+/g,' '), e=$('#re').value.trim().toLowerCase(), p=$('#rp').value;
+ showAuthMessage('');
+ if(!n){showAuthMessage('Enter your full name in the Full name field.');$('#rn').focus();return;}
+ if(!okMail(e)){showAuthMessage('Enter your work email ending in @iracktech.com in the Work email field.');$('#re').focus();return;}
+ if(p.length<6){showAuthMessage('Choose a password with at least 6 characters.');$('#rp').focus();return;}
+ if(data.staff.some(x=>x.email===e)){showAuthMessage('An account with this email already exists. Try signing in instead.');return;}
  setBusy('rgBtn','Creating account…');
  try {
    const res = await auth.createUserWithEmailAndPassword(e, p);
@@ -182,10 +207,7 @@ async function registerUser(){
      badge:'', days:5, active:true, mgr:e==='manager@iracktech.com'
    });
  } catch(err) {
-   let m = err.message || String(err);
-   if (err && err.code === 'auth/configuration-not-found' && window.__fbCfgNote) m = window.__fbCfgNote;
-   if(am) am.innerHTML = m;
-   else alert(m);
+   showAuthMessage(authErrorMessage(err,'register'));
  } finally { setBusy('rgBtn', false); }
 }
 
