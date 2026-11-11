@@ -45,7 +45,7 @@ The old local SQLite database is not part of this deployment and is ignored by G
 
 ## Hikvision
 
-`POST /hikvision/events` accepts JSON or XML access-controller events and requires an `Authorization: Bearer <token>` header matching the `HIKVISION_WEBHOOK_TOKEN` Worker secret. Only successful face-required access events are counted, and one punch-in per employee per Nairobi calendar day is recorded. This Worker endpoint replaces the Laravel webhook receiver; a continuously running outbound ISAPI listener is not included in Workers.
+`POST /hikvision/events` accepts JSON or XML access-controller events and requires an `Authorization: Bearer <token>` header matching the `HIKVISION_WEBHOOK_TOKEN` Worker secret. Successful face-required events are grouped by employee and Nairobi calendar day: the earliest event is the punch-in, the latest is the punch-out, and hours are recalculated as events arrive. Employee numbers must match `users.employee_id`. Configure the access controller to send events to this endpoint; the Worker does not continuously poll the device.
 
 ## Vercel frontend
 

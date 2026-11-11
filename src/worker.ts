@@ -354,11 +354,26 @@ async function hikvision(request: Request, env: Env): Promise<Response> {
   const local = dateParts(parsed);
   const time = local.time;
   const status = time.slice(0, 5) > '09:00' ? 'late' : 'present';
-  const inserted = await env.DB.prepare(`INSERT INTO attendances (user_id, date, punch_in, status)
-      VALUES (?, ?, ?, ?) ON CONFLICT(user_id, date) DO NOTHING`)
-    .bind(user.id, local.date, parsed.toISOString(), status).run();
-  if (inserted.meta.changes) await broadcast(env, 'attendance.updated');
-  return json({ message: inserted.meta.changes ? 'Punch-in recorded.' : 'Punch-in already recorded.' });
+  const instant = parsed.toISOString();
+  const saved = await env.DB.prepare(`INSERT INTO attendances (user_id, date, punch_in, status)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(user_id, date) DO UPDATE SET
+        punch_out = CASE
+          WHEN MAX(COALESCE(attendances.punch_out, attendances.punch_in), excluded.punch_in) > MIN(attendances.punch_in, excluded.punch_in)
+          THEN MAX(COALESCE(attendances.punch_out, attendances.punch_in), excluded.punch_in)
+          ELSE NULL
+        END,
+        total_hours = CASE
+          WHEN MAX(COALESCE(attendances.punch_out, attendances.punch_in), excluded.punch_in) > MIN(attendances.punch_in, excluded.punch_in)
+          THEN ROUND((julianday(MAX(COALESCE(attendances.punch_out, attendances.punch_in), excluded.punch_in)) - julianday(MIN(attendances.punch_in, excluded.punch_in))) * 24, 2)
+          ELSE NULL
+        END,
+        status = CASE WHEN excluded.punch_in < attendances.punch_in THEN excluded.status ELSE attendances.status END,
+        punch_in = MIN(attendances.punch_in, excluded.punch_in),
+        updated_at = CURRENT_TIMESTAMP`)
+    .bind(user.id, local.date, instant, status).run();
+  if (saved.meta.changes) await broadcast(env, 'attendance.updated');
+  return json({ message: 'Attendance event recorded.' });
 }
 
 async function api(request: Request, env: Env): Promise<Response> {
