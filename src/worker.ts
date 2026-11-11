@@ -384,10 +384,8 @@ async function hikvision(request: Request, env: Env): Promise<Response> {
   const eventType = payload.eventType ?? xmlValue(xml, 'eventType');
   const eventState = String(payload.eventState ?? xmlValue(xml, 'eventState') ?? 'active').toLowerCase();
   const mode = String(event.currentVerifyMode ?? '').toLowerCase();
-  if (eventType !== 'AccessControllerEvent' || eventState !== 'active' || String(event.currentEvent ?? 'true').toLowerCase() === 'false'
-      || Number(event.majorEventType) !== 5 || Number(event.subEventType) !== 75 || !mode.includes('face')) {
-    return json({ message: 'Event ignored.' });
-  }
+  if (eventType !== 'AccessControllerEvent' || eventState !== 'active' || Number(event.majorEventType) !== 5
+      || Number(event.subEventType) !== 75 || !mode.includes('face')) return json({ message: 'Event ignored.' });
   const employeeId = String(event.employeeNoString ?? '').trim();
   if (!employeeId) return json({ message: 'Employee number missing.' });
   const user = await env.DB.prepare('SELECT id FROM users WHERE employee_id = ?').bind(employeeId).first<{ id: number }>();
