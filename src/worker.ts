@@ -5,6 +5,7 @@ interface Env {
   ASSETS: Fetcher;
   LIVE: DurableObjectNamespace<LiveUpdates>;
   APP_TIMEZONE?: string;
+  APP_ORIGIN?: string;
   HIKVISION_WEBHOOK_TOKEN?: string;
 }
 
@@ -154,9 +155,11 @@ async function loadSession(request: Request, env: Env): Promise<Session | null> 
   return row ? { user: row, tokenHash: row.token_hash } : null;
 }
 
-function sameOrigin(request: Request): boolean {
+function sameOrigin(request: Request, env: Env): boolean {
   const origin = request.headers.get('origin');
-  return !origin || origin === new URL(request.url).origin;
+  if (!origin) return true;
+  const allowedOrigins = [new URL(request.url).origin, ...(env.APP_ORIGIN ?? '').split(',').map((item) => item.trim()).filter(Boolean)];
+  return allowedOrigins.includes(origin);
 }
 
 function validCsrf(request: Request): boolean {
@@ -361,7 +364,7 @@ async function api(request: Request, env: Env): Promise<Response> {
   const { pathname } = new URL(request.url);
   const method = request.method.toUpperCase();
   const mutation = !['GET', 'HEAD', 'OPTIONS'].includes(method);
-  if (mutation && !sameOrigin(request)) return fail('Cross-origin request blocked.', 403);
+  if (mutation && !sameOrigin(request, env)) return fail('Cross-origin request blocked.', 403);
   if (pathname === '/api/health' && method === 'GET') return json({ status: 'ok', timezone: TZ, runtime: 'cloudflare-workers' });
   if (pathname === '/hikvision/events' && method === 'POST') return hikvision(request, env);
 

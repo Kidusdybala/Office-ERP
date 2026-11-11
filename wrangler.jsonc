@@ -27,6 +27,7 @@
     { "tag": "v1", "new_sqlite_classes": ["LiveUpdates"] }
   ],
   "vars": {
-    "APP_TIMEZONE": "Africa/Nairobi"
+    "APP_TIMEZONE": "Africa/Nairobi",
+    "APP_ORIGIN": "https://office-erp-sage.vercel.app"
   }
 }

@@ -47,6 +47,6 @@ The old local SQLite database is not part of this deployment and is ignored by G
 
 `POST /hikvision/events` accepts JSON or XML access-controller events and requires an `Authorization: Bearer <token>` header matching the `HIKVISION_WEBHOOK_TOKEN` Worker secret. Only successful face-required access events are counted, and one punch-in per employee per Nairobi calendar day is recorded. This Worker endpoint replaces the Laravel webhook receiver; a continuously running outbound ISAPI listener is not included in Workers.
 
-## Vercel
+## Vercel frontend
 
-Deploy the app to Cloudflare Workers with Wrangler. The repository no longer uses Vercel for the application runtime. A Vercel deployment is not configured.
+The Vercel project can host the static Vite frontend while `vercel.json` proxies `/api/*` requests to the Cloudflare Worker. Keep `APP_ORIGIN` in `wrangler.jsonc` aligned with the production Vercel origin so same-origin checks and session cookies work through the rewrite. The Cloudflare Worker remains the API and D1 runtime.

@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://office-erp.buddykk07.workers.dev/api/:path*"
+    },
+    {
+      "source": "/hikvision/events",
+      "destination": "https://office-erp.buddykk07.workers.dev/hikvision/events"
+    }
+  ]
+}
