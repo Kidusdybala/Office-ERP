@@ -28,6 +28,7 @@
   ],
   "vars": {
     "APP_TIMEZONE": "Africa/Nairobi",
-    "APP_ORIGIN": "https://office-erp-sage.vercel.app"
+    "APP_ORIGIN": "https://office-erp-sage.vercel.app",
+    "HIKVISION_ALLOWED_IP": "196.189.56.187"
   }
 }
