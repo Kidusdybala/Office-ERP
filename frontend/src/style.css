@@ -87,16 +87,17 @@
 .profile-panel .form-stack .button{min-height:44px;font-size:13px}
 
 @media(max-width:760px){
-  .sidebar{display:grid;grid-template-columns:minmax(0,5fr) minmax(48px,1fr);column-gap:2px}
-  .sidebar nav{grid-column:1;grid-row:1}
-  .sidebar-bottom{display:block;grid-column:2;grid-row:1;align-self:stretch;margin:0}
-  .sidebar-bottom .support-note{display:none}
-  .sidebar-bottom .signout{display:flex;min-height:48px;height:100%;flex-direction:column;justify-content:center;align-items:center;gap:3px;border:0;border-radius:8px;padding:5px 2px;font-size:9px;line-height:1.05;white-space:nowrap}
-  .sidebar-bottom .signout .nav-icon{width:auto;font-size:17px;line-height:1}
+  .sidebar{display:flex;flex-direction:row}
+  .sidebar nav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;width:100%}
+  .sidebar-bottom{display:none}
   .auth-card .brand-lockup{display:flex;align-items:center;justify-content:center;gap:13px;padding:0 0 30px;text-align:center}
   .auth-card .brand-lockup img{width:54px;height:54px}
   .auth-card .brand-lockup b{font-size:19px;letter-spacing:-.4px}
   .auth-card .brand-lockup small,.auth-card .auth-intro>.eyebrow{display:none}
+  .user-meta{display:block;max-width:96px}
+  .user-meta b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .user-meta small{display:none}
+  .chevron{display:inline;color:#82928f}
 }
 
 @media(max-width:760px){
@@ -149,4 +150,20 @@ html,body,#app{width:100%;max-width:100%;overflow-x:clip}
   .page-heading,.page-heading>div,.heading-actions,.panel,.metric-card{min-width:0;max-width:100%;}
   .heading-actions{flex-wrap:wrap}
   .table-wrap{width:100%;}
+}
+
+.user-menu{border:0;background:transparent;color:inherit;padding:5px;border-radius:9px}
+.user-menu:hover,.user-menu:focus-visible{background:#f3f8f6;outline-color:#83cfc0}
+.account-menu-wrap{position:relative}
+.account-menu{position:absolute;top:calc(100% + 7px);right:0;z-index:9;width:min(220px,calc(100vw - 24px));padding:6px;background:#fff;border:1px solid var(--line);border-radius:11px;box-shadow:0 12px 34px #143d3520}
+.account-menu[hidden]{display:none}
+.account-menu a,.account-menu button{display:flex;align-items:center;width:100%;min-height:42px;gap:9px;padding:10px 11px;border:0;border-radius:7px;background:transparent;color:#47615b;text-align:left;font-size:14px;font-weight:600}
+.account-menu a:hover,.account-menu button:hover{background:#f3f8f6;color:var(--teal)}
+.account-menu button{color:#ad463c}
+.logout-dialog .dialog-form{gap:14px}
+.logout-dialog .dialog-form h2{font-size:21px}
+.logout-dialog .dialog-actions{justify-content:flex-end}
+@media(max-width:480px){
+  .account-menu{top:calc(100% + 5px)}
+  .logout-dialog .dialog-actions{flex-direction:row-reverse}
 }

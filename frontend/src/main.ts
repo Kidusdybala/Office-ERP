@@ -3,6 +3,36 @@ import './style.css';
 type User = { id: number; employee_id: string | null; name: string; email: string; role: string; department: string | null };
 type Data = Record<string, any>;
 const app = document.querySelector<HTMLDivElement>('#app')!;
+app.addEventListener('click', (event) => {
+  const target = event.target as HTMLElement;
+  const menu = app.querySelector<HTMLElement>('#account-menu');
+  const toggle = target.closest<HTMLButtonElement>('#account-menu-toggle');
+  if (toggle && menu) {
+    menu.hidden = !menu.hidden;
+    toggle.setAttribute('aria-expanded', String(!menu.hidden));
+    return;
+  }
+  if (target.closest('#menu-signout')) {
+    if (menu) menu.hidden = true;
+    app.querySelector<HTMLDialogElement>('#logout-dialog')?.showModal();
+    return;
+  }
+  if (target.closest('#cancel-signout')) {
+    app.querySelector<HTMLDialogElement>('#logout-dialog')?.close();
+    return;
+  }
+  if (target.closest('#confirm-signout')) {
+    app.querySelector<HTMLDialogElement>('#logout-dialog')?.close();
+    finishSignOut();
+    return;
+  }
+  const dialog = app.querySelector<HTMLDialogElement>('#logout-dialog');
+  if (dialog && event.target === dialog) dialog.close();
+  if (menu && !target.closest('.account-menu-wrap')) {
+    menu.hidden = true;
+    app.querySelector('#account-menu-toggle')?.setAttribute('aria-expanded', 'false');
+  }
+});
 let user: User | null = null;
 let page = 'dashboard';
 let dashboardData: Data | null = null;
@@ -10,6 +40,17 @@ let refreshTimer: number | undefined;
 let liveSocket: WebSocket | null = null;
 let reconnectTimer: number | undefined;
 let dashboardRefreshInFlight = false;
+
+async function finishSignOut(): Promise<void> {
+  try { await api('/api/auth/logout', { method: 'POST', body: '{}' }); } catch { /* still clear the local view */ }
+  liveSocket?.close();
+  liveSocket = null;
+  window.clearTimeout(reconnectTimer);
+  user = null;
+  dashboardData = null;
+  location.hash = '#login';
+  authView();
+}
 
 function csrfToken(): string {
   return document.cookie.split('; ').find((item) => item.startsWith('erp_csrf='))?.slice('erp_csrf='.length) ?? '';
@@ -110,22 +151,12 @@ function shell(content: string, active = page): void {
   app.innerHTML = `<div class="app-shell" data-page="${active}">
     <aside class="sidebar"><a class="brand-lockup" href="#dashboard"><img src="/images/logo-circle.png" alt=""><div><b>IRack IT Solution</b><small>WORKFORCE ERP</small></div></a>
       <div class="nav-caption">WORKSPACE</div><nav>${nav.map(([id, label, icon]) => `<a href="#${id}" class="nav-link ${active === id ? 'active' : ''}"><span class="nav-icon">${icon}</span>${label}${id === 'dashboard' ? '<i></i>' : ''}</a>`).join('')}</nav>
-      <div class="sidebar-bottom"><div class="support-note"><span class="live-dot"></span><div><b>Workspace is live</b><small>Synced to Nairobi time</small></div></div><button class="nav-link signout" id="signout"><span class="nav-icon">↪</span>Sign out</button></div>
+      <div class="sidebar-bottom"><div class="support-note"><span class="live-dot"></span><div><b>Workspace is live</b><small>Synced to Nairobi time</small></div></div></div>
     </aside>
-    <main class="main-area"><header class="topbar"><div class="mobile-brand"><img src="/images/logo-circle.png" alt=""> IRack Workforce</div><div class="topbar-spacer"></div><div class="user-menu"><div class="avatar">${escapeHtml(user.name.slice(0, 1).toUpperCase())}</div><div class="user-meta"><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.department ?? user.role)}</small></div><span class="chevron">⌄</span></div></header>
+    <main class="main-area"><header class="topbar"><div class="mobile-brand"><img src="/images/logo-circle.png" alt=""> IRack Workforce</div><div class="topbar-spacer"></div><div class="account-menu-wrap"><button class="user-menu" id="account-menu-toggle" type="button" aria-label="Open profile menu" aria-haspopup="menu" aria-expanded="false"><div class="avatar">${escapeHtml(user.name.slice(0, 1).toUpperCase())}</div><div class="user-meta"><b>${escapeHtml(user.name)}</b><small>${escapeHtml(user.department ?? 'Profile')}</small></div><span class="chevron">⌄</span></button><div class="account-menu" id="account-menu" role="menu" hidden><a href="#profile" role="menuitem">My profile</a><button type="button" id="menu-signout" role="menuitem">↪ <span>Sign out</span></button></div></div></header>
       <section class="page-content">${content}</section>
     </main>
-  </div>`;
-  document.querySelector('#signout')?.addEventListener('click', async () => {
-    try { await api('/api/auth/logout', { method: 'POST', body: '{}' }); } catch { /* still clear the local view */ }
-    liveSocket?.close();
-    liveSocket = null;
-    window.clearTimeout(reconnectTimer);
-    user = null;
-    dashboardData = null;
-    location.hash = '#login';
-    authView();
-  });
+  </div><dialog id="logout-dialog" class="dialog logout-dialog"><div class="dialog-form"><h2>Sign out?</h2><p>Are you sure you want to sign out?</p><div class="dialog-actions"><button type="button" class="button secondary" id="cancel-signout">Cancel</button><button type="button" class="button danger" id="confirm-signout">Sign out</button></div></div></dialog>`;
 }
 
 function connectLive(): void {
