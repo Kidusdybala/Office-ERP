@@ -293,27 +293,32 @@ async function listReports(user: User, env: Env, request: Request): Promise<Resp
 async function punch(user: User, env: Env, direction: 'in' | 'out'): Promise<Response> {
   if (user.role === 'manager' || user.role === 'admin') return fail('Managers cannot punch in or out.', 403);
   const now = new Date();
-  const { date, time } = dateParts(now);
+  const { date } = dateParts(now);
   const instant = now.toISOString();
+  const existing = await env.DB.prepare('SELECT punch_in, punch_out FROM attendances WHERE user_id = ? AND date = ?')
+    .bind(user.id, date).first<{ punch_in: string | null; punch_out: string | null }>();
   if (direction === 'in') {
-    const existing = await env.DB.prepare('SELECT punch_in FROM attendances WHERE user_id = ? AND date = ?').bind(user.id, date).first<{ punch_in: string | null }>();
-    if (existing?.punch_in) return fail('You already punched in today.', 409);
-    const status = time.slice(0, 5) > '09:00' ? 'late' : 'present';
-    await env.DB.prepare(`INSERT INTO attendances (user_id, date, punch_in, status) VALUES (?, ?, ?, ?)
-      ON CONFLICT(user_id, date) DO UPDATE SET punch_in = excluded.punch_in, status = excluded.status, updated_at = CURRENT_TIMESTAMP`)
-      .bind(user.id, date, instant, status).run();
+    const punchIn = existing?.punch_in && existing.punch_in < instant ? existing.punch_in : instant;
+    const punchOut = existing?.punch_out ?? null;
+    const hours = punchOut ? Math.max(0, Math.round((new Date(punchOut).getTime() - new Date(punchIn).getTime()) / 36000) / 100) : null;
+    const punchInTime = dateParts(new Date(punchIn)).time;
+    const status = hours !== null && hours < 4 ? 'half_day' : punchInTime.slice(0, 5) > '09:00' ? 'late' : 'present';
+    await env.DB.prepare(`INSERT INTO attendances (user_id, date, punch_in, punch_out, total_hours, status) VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(user_id, date) DO UPDATE SET punch_in = MIN(attendances.punch_in, excluded.punch_in),
+        punch_out = excluded.punch_out, total_hours = excluded.total_hours, status = excluded.status, updated_at = CURRENT_TIMESTAMP`)
+      .bind(user.id, date, punchIn, punchOut, hours, status).run();
     await broadcast(env, 'attendance.updated');
-    return json({ message: `Punched in at ${time.slice(0, 5)}.`, attendance: { date, punch_in: instant, punch_out: null, status } });
+    return json({ message: `Earliest punch-in is ${dateParts(new Date(punchIn)).time.slice(0, 5)}.`, attendance: { date, punch_in: punchIn, punch_out: punchOut, total_hours: hours, status } });
   }
-  const existing = await env.DB.prepare('SELECT * FROM attendances WHERE user_id = ? AND date = ?').bind(user.id, date).first<{ punch_in: string | null; punch_out: string | null }>();
   if (!existing?.punch_in) return fail('You need to punch in before punching out.', 409);
-  if (existing.punch_out) return fail('You already punched out today.', 409);
-  const hours = Math.max(0, Math.round((now.getTime() - new Date(existing.punch_in).getTime()) / 36000) / 100);
-  const status = hours < 4 ? 'half_day' : undefined;
-  await env.DB.prepare('UPDATE attendances SET punch_out = ?, total_hours = ?, status = COALESCE(?, status), updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND date = ?')
-    .bind(instant, hours, status ?? null, user.id, date).run();
+  const punchOut = existing.punch_out && existing.punch_out > instant ? existing.punch_out : instant;
+  const hours = Math.max(0, Math.round((new Date(punchOut).getTime() - new Date(existing.punch_in).getTime()) / 36000) / 100);
+  const punchInTime = dateParts(new Date(existing.punch_in)).time;
+  const status = hours < 4 ? 'half_day' : punchInTime.slice(0, 5) > '09:00' ? 'late' : 'present';
+  await env.DB.prepare('UPDATE attendances SET punch_out = ?, total_hours = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ? AND date = ?')
+    .bind(punchOut, hours, status, user.id, date).run();
   await broadcast(env, 'attendance.updated');
-  return json({ message: `Punched out at ${time.slice(0, 5)} — ${hours} hrs logged.`, attendance: { date, punch_in: existing.punch_in, punch_out: instant, total_hours: hours } });
+  return json({ message: `Latest punch-out is ${dateParts(new Date(punchOut)).time.slice(0, 5)} — ${hours} hrs logged.`, attendance: { date, punch_in: existing.punch_in, punch_out: punchOut, total_hours: hours, status } });
 }
 
 function xmlValue(xml: string, name: string): string | null {
