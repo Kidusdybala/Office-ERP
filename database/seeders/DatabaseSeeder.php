@@ -22,9 +22,9 @@ class DatabaseSeeder extends Seeder
         ]);
         
         User::factory()->create([
-            'name' => 'Test Employee',
-            'email' => 'employee@erp.local',
-            'password' => Hash::make('password'),
+            'name' => 'Kidus',
+            'email' => 'kidusadugna@iracktech.com',
+            'password' => Hash::make('kidusdybala'),
             'role' => 'employee',
             'department_id' => $dept->id,
             'manager_id' => $manager->id,

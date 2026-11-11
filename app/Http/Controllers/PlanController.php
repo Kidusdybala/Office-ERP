@@ -18,6 +18,8 @@ class PlanController extends Controller
 
         if ($week === 'last_week') {
             $query->whereBetween('plan_date', [now()->subWeek()->startOfWeek(), now()->subWeek()->endOfWeek()]);
+        } elseif ($week === 'all') {
+            // Show all past plans
         } else {
             // Default to this week
             $query->whereBetween('plan_date', [now()->startOfWeek(), now()->endOfWeek()]);

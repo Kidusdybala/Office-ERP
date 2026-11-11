@@ -1,69 +1,41 @@
 <x-guest-layout>
-    <!-- Session Status -->
-    <x-auth-session-status class="mb-4" :status="session('status')" />
+    <div class="mb-8">
+        <p class="text-sm font-semibold uppercase tracking-[0.16em] text-teal-700">Welcome back</p>
+        <h1 class="mt-3 text-3xl font-semibold tracking-tight text-teal-950">Sign in to your account</h1>
+        <p class="mt-2 text-sm leading-6 text-stone-600">Enter your work email and password to continue.</p>
+    </div>
 
-    <form method="POST" action="{{ route('login') }}">
+    <x-auth-session-status class="mb-5 rounded-lg bg-teal-50 px-4 py-3 text-sm text-teal-800" :status="session('status')" />
+
+    <form method="POST" action="{{ route('login') }}" class="space-y-5">
         @csrf
-
-        <!-- Email Address -->
         <div>
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input id="email" class="block mt-1 w-full" type="email" name="email" :value="old('email')" required autofocus autocomplete="username" />
+            <label for="email" class="mb-2 block text-sm font-medium text-teal-950">Work email</label>
+            <input id="email" name="email" type="email" value="{{ old('email') }}" required autofocus autocomplete="username" placeholder="you@company.com"
+                   class="block w-full rounded-xl border border-teal-200 bg-[#fffdf5] px-4 py-3 text-sm text-teal-950 shadow-sm placeholder:text-stone-400 focus:border-teal-600 focus:outline-none focus:ring-4 focus:ring-teal-100">
             <x-input-error :messages="$errors->get('email')" class="mt-2" />
         </div>
 
-        <!-- Password -->
-        <div class="mt-4">
-            <x-input-label for="password" :value="__('Password')" />
-
-            <x-text-input id="password" class="block mt-1 w-full"
-                            type="password"
-                            name="password"
-                            required autocomplete="current-password" />
-
+        <div>
+            <div class="mb-2 flex items-center justify-between gap-3">
+                <label for="password" class="block text-sm font-medium text-teal-950">Password</label>
+                @if (Route::has('password.request'))
+                    <a class="text-sm font-medium text-teal-700 hover:text-teal-900" href="{{ route('password.request') }}">Forgot password?</a>
+                @endif
+            </div>
+            <input id="password" name="password" type="password" required autocomplete="current-password" placeholder="Enter your password"
+                   class="block w-full rounded-xl border border-teal-200 bg-[#fffdf5] px-4 py-3 text-sm text-teal-950 shadow-sm placeholder:text-stone-400 focus:border-teal-600 focus:outline-none focus:ring-4 focus:ring-teal-100">
             <x-input-error :messages="$errors->get('password')" class="mt-2" />
         </div>
 
-        <!-- Remember Me -->
-        <div class="block mt-4">
-            <label for="remember_me" class="inline-flex items-center">
-                <input id="remember_me" type="checkbox" class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500" name="remember">
-                <span class="ms-2 text-sm text-gray-600">{{ __('Remember me') }}</span>
-            </label>
-        </div>
+        <label for="remember_me" class="flex items-center gap-2.5 text-sm text-stone-600">
+            <input id="remember_me" type="checkbox" name="remember" class="h-4 w-4 rounded border-teal-300 text-teal-700 focus:ring-teal-500">
+            Remember me
+        </label>
 
-        <div class="flex items-center justify-end mt-4">
-            @if (Route::has('password.request'))
-                <a class="underline text-sm text-gray-600 hover:text-gray-900 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500" href="{{ route('password.request') }}">
-                    {{ __('Forgot your password?') }}
-                </a>
-            @endif
-
-            <x-primary-button class="ms-3">
-                {{ __('Log in') }}
-            </x-primary-button>
-        </div>
+        <button type="submit" class="flex w-full items-center justify-center rounded-xl bg-teal-800 px-4 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-900 focus:outline-none focus:ring-4 focus:ring-teal-200">
+            Sign in
+            <svg class="ml-2 h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 10a.75.75 0 0 1 .75-.75h10.69L10.22 5.03a.75.75 0 1 1 1.06-1.06l5.5 5.5a.75.75 0 0 1 0 1.06l-5.5 5.5a.75.75 0 1 1-1.06-1.06l4.22-4.22H3.75A.75.75 0 0 1 3 10Z" clip-rule="evenodd" /></svg>
+        </button>
     </form>
-
-    <div class="mt-6 border-t border-gray-200 pt-4">
-        <p class="text-sm text-gray-600 mb-3">Quick login (demo accounts):</p>
-        <div class="flex flex-col sm:flex-row gap-3">
-            <button type="button" onclick="quickLogin('manager@erp.local')"
-                    class="inline-flex items-center justify-center px-4 py-2 bg-gray-800 border border-transparent rounded-md font-semibold text-xs text-white uppercase tracking-widest hover:bg-gray-700 focus:bg-gray-700 active:bg-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
-                Log in as Manager
-            </button>
-            <button type="button" onclick="quickLogin('employee@erp.local')"
-                    class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 rounded-md font-semibold text-xs text-gray-700 uppercase tracking-widest hover:bg-gray-50 focus:bg-gray-50 active:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition ease-in-out duration-150">
-                Log in as Employee
-            </button>
-        </div>
-    </div>
-
-    <script>
-        function quickLogin(email) {
-            document.getElementById('email').value = email;
-            document.getElementById('password').value = 'password';
-            document.querySelector('form').submit();
-        }
-    </script>
 </x-guest-layout>
