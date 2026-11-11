@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "irack-workforce-erp",
+  "name": "office-erp",
   "main": "src/worker.ts",
   "compatibility_date": "2026-11-11",
   "observability": { "enabled": true },
@@ -14,7 +14,7 @@
     {
       "binding": "DB",
       "database_name": "irack-workforce-erp",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "8e434c62-da93-4830-91b2-7c41adbfd80a",
       "migrations_dir": "migrations"
     }
   ],
