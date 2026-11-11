@@ -98,3 +98,46 @@
   .auth-card .brand-lockup b{font-size:19px;letter-spacing:-.4px}
   .auth-card .brand-lockup small,.auth-card .auth-intro>.eyebrow{display:none}
 }
+
+@media(max-width:760px){
+  .nav-link:not(.signout){font-size:10px}
+  .sidebar-bottom .signout{font-size:10px}
+  .mobile-brand{font-size:14px}
+  .page-heading .eyebrow,.eyebrow{font-size:11px}
+  .page-heading h1{font-size:clamp(24px,6.2vw,29px)}
+  .page-heading p{font-size:14px;line-height:1.5}
+  .button{font-size:14px}
+  .metric-label{font-size:12px}
+  .metric-value{font-size:28px}
+  .metric-foot{font-size:12px;line-height:1.4}
+  .panel-heading h2{font-size:16px}
+  .panel-heading p{font-size:13px;line-height:1.4}
+  .total-hours{font-size:18px}
+  .total-hours small{font-size:11px}
+  .chart-day{font-size:12px}
+  .chart-day small{font-size:11px}
+  .legend{font-size:11px}
+  .workflow-title{font-size:14px}
+  .workflow-copy p,.workflow-copy>a{font-size:12px;line-height:1.45}
+  .badge{font-size:11px}
+  .text-link{font-size:12px}
+  .punch-reminder b{font-size:12px}
+  .punch-reminder small{font-size:11px}
+  th{font-size:11px}
+  td{font-size:12px}
+  .table-sub{font-size:11px}
+  .profile-panel .form-stack label{font-size:13px}
+  .profile-panel .form-stack input{font-size:14px}
+  .auth-card .form-stack label{font-size:13px}
+  .auth-switch{font-size:13px}
+}
+@media(max-width:480px){
+  .metric-card{padding:12px}
+  .metric-label{font-size:11.5px}
+  .metric-value{font-size:27px}
+  .metric-foot{font-size:11px}
+  .panel-heading h2{font-size:15px}
+  .panel-heading p{font-size:12px}
+  .workflow-title{font-size:13px}
+  .nav-link:not(.signout),.sidebar-bottom .signout{font-size:9.5px}
+}
