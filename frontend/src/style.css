@@ -93,7 +93,8 @@
   .sidebar-bottom .support-note{display:none}
   .sidebar-bottom .signout{display:flex;min-height:48px;height:100%;flex-direction:column;justify-content:center;align-items:center;gap:3px;border:0;border-radius:8px;padding:5px 2px;font-size:9px;line-height:1.05;white-space:nowrap}
   .sidebar-bottom .signout .nav-icon{width:auto;font-size:17px;line-height:1}
-  .auth-card .brand-lockup{display:flex;align-items:center;justify-content:center;gap:11px;padding:0 0 30px;text-align:center}
-  .auth-card .brand-lockup img{width:42px;height:42px}
+  .auth-card .brand-lockup{display:flex;align-items:center;justify-content:center;gap:13px;padding:0 0 30px;text-align:center}
+  .auth-card .brand-lockup img{width:54px;height:54px}
+  .auth-card .brand-lockup b{font-size:19px;letter-spacing:-.4px}
   .auth-card .brand-lockup small,.auth-card .auth-intro>.eyebrow{display:none}
 }
