@@ -9,6 +9,7 @@ let dashboardData: Data | null = null;
 let refreshTimer: number | undefined;
 let liveSocket: WebSocket | null = null;
 let reconnectTimer: number | undefined;
+let dashboardRefreshInFlight = false;
 
 function csrfToken(): string {
   return document.cookie.split('; ').find((item) => item.startsWith('erp_csrf='))?.slice('erp_csrf='.length) ?? '';
@@ -106,7 +107,7 @@ function shell(content: string, active = page): void {
     ['dashboard', 'Overview', '◫'], ['attendance', 'Punch In/Out', '◷'],
     ['plans', 'Plans & workflow', '▤'], ['reports', 'Reports', '▧'], ['profile', 'Profile', '○'],
   ];
-  app.innerHTML = `<div class="app-shell">
+  app.innerHTML = `<div class="app-shell" data-page="${active}">
     <aside class="sidebar"><a class="brand-lockup" href="#dashboard"><img src="/images/logo-circle.png" alt=""><div><b>IRack IT Solution</b><small>WORKFORCE ERP</small></div></a>
       <div class="nav-caption">WORKSPACE</div><nav>${nav.map(([id, label, icon]) => `<a href="#${id}" class="nav-link ${active === id ? 'active' : ''}"><span class="nav-icon">${icon}</span>${label}${id === 'dashboard' ? '<i></i>' : ''}</a>`).join('')}</nav>
       <div class="sidebar-bottom"><div class="support-note"><span class="live-dot"></span><div><b>Workspace is live</b><small>Synced to Nairobi time</small></div></div><button class="nav-link signout" id="signout"><span class="nav-icon">↪</span>Sign out</button></div>
@@ -145,6 +146,8 @@ function connectLive(): void {
 
 async function renderDashboard(): Promise<void> {
   const data = await api<Data>('/api/dashboard');
+  const dashboardIsVisible = app.querySelector('.app-shell')?.getAttribute('data-page') === 'dashboard';
+  if (dashboardIsVisible && dashboardData && JSON.stringify(data) === JSON.stringify(dashboardData)) return;
   dashboardData = data;
   const attendance = data.attendance;
   const myPunch = attendance.today;
@@ -271,8 +274,10 @@ async function render(): Promise<void> {
     else if (page === 'profile') await renderProfile();
     else { page = 'dashboard'; await renderDashboard(); }
     if (page === 'dashboard') refreshTimer = window.setInterval(() => {
-      if (document.visibilityState === 'visible' && liveSocket?.readyState !== WebSocket.OPEN && !document.querySelector('dialog[open]')) renderDashboard().catch(showError);
-    }, 30_000);
+      if (document.visibilityState !== 'visible' || document.querySelector('dialog[open]') || dashboardRefreshInFlight) return;
+      dashboardRefreshInFlight = true;
+      renderDashboard().catch(showError).finally(() => { dashboardRefreshInFlight = false; });
+    }, 10_000);
   } catch (error) {
     if (message(error).includes('Unauthenticated')) { user = null; authView(false); }
     else showError(error);
@@ -280,4 +285,7 @@ async function render(): Promise<void> {
 }
 
 window.addEventListener('hashchange', () => render().catch(showError));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && user && page === 'dashboard') render().catch(showError);
+});
 render().catch(showError);
