@@ -1,66 +1,52 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# IRack Workforce ERP on Cloudflare Workers
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+This project runs as a TypeScript Cloudflare Worker. The UI is built as a static app and served by Worker Assets; application records and sessions live in Cloudflare D1. The app uses Africa/Nairobi local time.
 
-## About Laravel
+Authenticated browsers connect to a Durable Object WebSocket channel. Attendance, plans, reports, and profile changes broadcast refresh events so open sessions update immediately; the dashboard keeps a 30-second refresh as a fallback if the socket disconnects.
 
-## Hikvision attendance integration
+## Local development
 
-`php artisan hikvision:listen` opens a digest-authenticated ISAPI alert stream from the turnstile. Successful face access events are matched against `users.employee_id` and create one punch-in for that employee per day. The listener discards event images and never logs raw payloads or employee IDs. It keeps running and reconnects after a stream interruption.
+Requirements: Node.js 22 or newer and a Cloudflare account for remote deployment.
 
-The optional `/hikvision/events` receiver accepts the same event shape from an integration gateway and requires `HIKVISION_WEBHOOK_TOKEN`. Enroll each employee's face on the turnstile with an employee number that exactly matches the ERP `employee_id`. Configure the device's authentication mode to require face matching; mixed modes such as face-or-card are ignored by the listener so card passages cannot be counted as face punches.
-
-The listener runs on the ERP host and initiates the connection to the turnstile, so no inbound device connection to the development server is needed. Keep the listener under a process supervisor for continuous operation. Confirm each employee's number matches and test with an enrolled user before relying on attendance records.
-
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
-
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```sh
+npm install
+npm run build
+npx wrangler d1 migrations apply irack-workforce-erp --local
+npm run cf:dev
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+The local D1 database is created under Wrangler's local state directory. It is separate from the old Laravel SQLite file at `database/database.sqlite`.
 
-## Contributing
+## First Cloudflare deployment
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+1. Authenticate the Wrangler CLI with `npx wrangler login`.
+2. Create the D1 database: `npx wrangler d1 create irack-workforce-erp`.
+3. Copy the database ID returned by Wrangler into `wrangler.jsonc`, replacing `REPLACE_WITH_D1_DATABASE_ID`.
+4. Apply the schema: `npx wrangler d1 migrations apply irack-workforce-erp --remote`.
+5. Set the Hikvision webhook secret if the integration is used: `npx wrangler secret put HIKVISION_WEBHOOK_TOKEN`.
+6. Build and deploy: `npm run build` followed by `npm run cf:deploy`.
 
-## Code of Conduct
+Cloudflare serves the app and API from one Worker. The SPA assets and API routes are deployed together. Use the Worker's `*.workers.dev` URL for an initial smoke check, then attach a custom domain from the Cloudflare dashboard.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Accounts and access
 
-## Security Vulnerabilities
+Register through the app to create an employee account. New registrations cannot grant themselves manager access. After creating the account, an authorized operator can assign its role and employee ID with D1 SQL, for example:
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```sh
+npx wrangler d1 execute irack-workforce-erp --remote --command "UPDATE users SET role = 'manager' WHERE email = 'manager@example.com'"
+npx wrangler d1 execute irack-workforce-erp --remote --command "UPDATE users SET employee_id = 'EMP-001', department_id = (SELECT id FROM departments WHERE name = 'IT Department') WHERE email = 'employee@example.com'"
+```
 
-## License
+Departments can be added with `INSERT INTO departments (name) VALUES ('IT Department')` using the same `wrangler d1 execute` command. Avoid putting real passwords or API tokens into SQL history, source files, or Git.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Data migration
+
+The old local SQLite database is not part of this deployment and is ignored by Git. The new D1 database starts empty. Export and migrate existing employee, department, attendance, plan, and report records separately before switching staff to the Worker URL. Password hashes from Laravel are not compatible with this app's PBKDF2 password format, so users should register new accounts or use a purpose-built account migration process.
+
+## Hikvision
+
+`POST /hikvision/events` accepts JSON or XML access-controller events and requires an `Authorization: Bearer <token>` header matching the `HIKVISION_WEBHOOK_TOKEN` Worker secret. Only successful face-required access events are counted, and one punch-in per employee per Nairobi calendar day is recorded. This Worker endpoint replaces the Laravel webhook receiver; a continuously running outbound ISAPI listener is not included in Workers.
+
+## Vercel
+
+Deploy the app to Cloudflare Workers with Wrangler. The repository no longer uses Vercel for the application runtime. A Vercel deployment is not configured.

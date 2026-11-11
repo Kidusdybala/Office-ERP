@@ -1,0 +1,2 @@
+# Copy to .dev.vars for local Worker development. Never commit actual tokens.
+HIKVISION_WEBHOOK_TOKEN=replace-with-a-long-random-token
