@@ -7,6 +7,7 @@ interface Env {
   APP_TIMEZONE?: string;
   APP_ORIGIN?: string;
   HIKVISION_WEBHOOK_TOKEN?: string;
+  HIKVISION_ALLOWED_IP?: string;
 }
 
 type User = {
@@ -329,7 +330,11 @@ function xmlValue(xml: string, name: string): string | null {
 async function hikvision(request: Request, env: Env): Promise<Response> {
   const token = env.HIKVISION_WEBHOOK_TOKEN;
   const provided = (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-  if (!token || !provided || token.length !== provided.length || [...token].reduce((n, c, i) => n | (c.charCodeAt(0) ^ provided.charCodeAt(i)), 0) !== 0) {
+  const matchesToken = !!token && provided.length === token.length
+    && [...token].reduce((different, char, index) => different | (char.charCodeAt(0) ^ provided.charCodeAt(index)), 0) === 0;
+  const allowedIp = env.HIKVISION_ALLOWED_IP?.trim();
+  const matchesIp = !!allowedIp && request.headers.get('cf-connecting-ip') === allowedIp;
+  if (!matchesToken && !matchesIp) {
     return fail('Unauthorized', 401);
   }
   const content = await request.text();
