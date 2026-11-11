@@ -327,6 +327,38 @@ function xmlValue(xml: string, name: string): string | null {
   return xml.match(new RegExp(`<(?:(?:[\\w.-]+):)?${escaped}[^>]*>([^<]*)<\\/`, 'i'))?.[1]?.trim() ?? null;
 }
 
+function jsonObjects(content: string): Record<string, unknown>[] {
+  const objects: Record<string, unknown>[] = [];
+  let start = -1;
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let index = 0; index < content.length; index += 1) {
+    const char = content[index];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') quoted = false;
+      continue;
+    }
+    if (char === '"') quoted = true;
+    else if (char === '{') {
+      if (depth === 0) start = index;
+      depth += 1;
+    } else if (char === '}' && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        try {
+          const parsed: unknown = JSON.parse(content.slice(start, index + 1));
+          if (isObject(parsed)) objects.push(parsed);
+        } catch { /* Non-JSON braces can appear in multipart metadata or image content. */ }
+        start = -1;
+      }
+    }
+  }
+  return objects;
+}
+
 async function hikvision(request: Request, env: Env): Promise<Response> {
   const token = env.HIKVISION_WEBHOOK_TOKEN;
   const provided = (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
@@ -341,6 +373,9 @@ async function hikvision(request: Request, env: Env): Promise<Response> {
   let payload: Record<string, unknown> = {};
   try { payload = JSON.parse(content) as Record<string, unknown>; } catch { /* XML event below */ }
   const xml = content.trim();
+  if (!Object.keys(payload).length) {
+    payload = jsonObjects(content).find((candidate) => candidate.eventType === 'AccessControllerEvent' || isObject(candidate.AccessControllerEvent)) ?? {};
+  }
   const event = isObject(payload.AccessControllerEvent) ? payload.AccessControllerEvent : {
     majorEventType: xmlValue(xml, 'majorEventType'), subEventType: xmlValue(xml, 'subEventType'),
     employeeNoString: xmlValue(xml, 'employeeNoString'), currentVerifyMode: xmlValue(xml, 'currentVerifyMode'),
@@ -350,7 +385,7 @@ async function hikvision(request: Request, env: Env): Promise<Response> {
   const eventState = String(payload.eventState ?? xmlValue(xml, 'eventState') ?? 'active').toLowerCase();
   const mode = String(event.currentVerifyMode ?? '').toLowerCase();
   if (eventType !== 'AccessControllerEvent' || eventState !== 'active' || String(event.currentEvent ?? 'true').toLowerCase() === 'false'
-      || Number(event.majorEventType) !== 5 || Number(event.subEventType) !== 75 || !mode.includes('face') || mode.includes('or')) {
+      || Number(event.majorEventType) !== 5 || Number(event.subEventType) !== 75 || !mode.includes('face')) {
     return json({ message: 'Event ignored.' });
   }
   const employeeId = String(event.employeeNoString ?? '').trim();
