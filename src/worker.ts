@@ -381,9 +381,7 @@ async function hikvision(request: Request, env: Env): Promise<Response> {
   const incomingMac = String(payload.macAddress ?? '').replace(/[^a-f\d]/gi, '').toLowerCase();
   const matchesDevice = !!configuredDeviceId && !!configuredMac
     && incomingDeviceId === configuredDeviceId && incomingMac === configuredMac;
-  if (!matchesToken && !matchesIp && !matchesDevice) {
-    return fail('Unauthorized', 401);
-  }
+  if (!matchesToken && !matchesIp && !matchesDevice) return fail('Unauthorized', 401);
   const event = isObject(payload.AccessControllerEvent) ? payload.AccessControllerEvent : {
     majorEventType: xmlValue(xml, 'majorEventType'), subEventType: xmlValue(xml, 'subEventType'),
     employeeNoString: xmlValue(xml, 'employeeNoString'), currentVerifyMode: xmlValue(xml, 'currentVerifyMode'),
