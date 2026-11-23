@@ -8,6 +8,8 @@ interface Env {
   APP_ORIGIN?: string;
   HIKVISION_WEBHOOK_TOKEN?: string;
   HIKVISION_ALLOWED_IP?: string;
+  HIKVISION_DEVICE_ID?: string;
+  HIKVISION_DEVICE_MAC?: string;
 }
 
 type User = {
@@ -360,21 +362,27 @@ function jsonObjects(content: string): Record<string, unknown>[] {
 }
 
 async function hikvision(request: Request, env: Env): Promise<Response> {
-  const token = env.HIKVISION_WEBHOOK_TOKEN;
-  const provided = (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
-  const matchesToken = !!token && provided.length === token.length
-    && [...token].reduce((different, char, index) => different | (char.charCodeAt(0) ^ provided.charCodeAt(index)), 0) === 0;
-  const allowedIp = env.HIKVISION_ALLOWED_IP?.trim();
-  const matchesIp = !!allowedIp && request.headers.get('cf-connecting-ip') === allowedIp;
-  if (!matchesToken && !matchesIp) {
-    return fail('Unauthorized', 401);
-  }
   const content = await request.text();
   let payload: Record<string, unknown> = {};
   try { payload = JSON.parse(content) as Record<string, unknown>; } catch { /* XML event below */ }
   const xml = content.trim();
   if (!Object.keys(payload).length) {
     payload = jsonObjects(content).find((candidate) => candidate.eventType === 'AccessControllerEvent' || isObject(candidate.AccessControllerEvent)) ?? {};
+  }
+  const token = env.HIKVISION_WEBHOOK_TOKEN;
+  const provided = (request.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '');
+  const matchesToken = !!token && provided.length === token.length
+    && [...token].reduce((different, char, index) => different | (char.charCodeAt(0) ^ provided.charCodeAt(index)), 0) === 0;
+  const allowedIp = env.HIKVISION_ALLOWED_IP?.trim();
+  const matchesIp = !!allowedIp && request.headers.get('cf-connecting-ip') === allowedIp;
+  const configuredDeviceId = env.HIKVISION_DEVICE_ID?.trim();
+  const configuredMac = env.HIKVISION_DEVICE_MAC?.replace(/[^a-f\d]/gi, '').toLowerCase();
+  const incomingDeviceId = request.headers.get('deviceid')?.trim();
+  const incomingMac = String(payload.macAddress ?? '').replace(/[^a-f\d]/gi, '').toLowerCase();
+  const matchesDevice = !!configuredDeviceId && !!configuredMac
+    && incomingDeviceId === configuredDeviceId && incomingMac === configuredMac;
+  if (!matchesToken && !matchesIp && !matchesDevice) {
+    return fail('Unauthorized', 401);
   }
   const event = isObject(payload.AccessControllerEvent) ? payload.AccessControllerEvent : {
     majorEventType: xmlValue(xml, 'majorEventType'), subEventType: xmlValue(xml, 'subEventType'),

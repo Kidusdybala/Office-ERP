@@ -29,6 +29,8 @@
   "vars": {
     "APP_TIMEZONE": "Africa/Nairobi",
     "APP_ORIGIN": "https://office-erp-sage.vercel.app",
-    "HIKVISION_ALLOWED_IP": "196.189.152.191"
+    "HIKVISION_ALLOWED_IP": "196.189.152.191",
+    "HIKVISION_DEVICE_ID": "FX1550626",
+    "HIKVISION_DEVICE_MAC": "a4:d5:c2:45:e4:79"
   }
 }
